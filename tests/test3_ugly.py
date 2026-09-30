@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (APP, Console, FakeTiles, check, client, console_env, fake_key, fake_opener, finish,  # noqa: E402
+from common import (APP, Console, FakeTiles, FakeZet, gtfs_zip, check, client, console_env, fake_key, fake_opener, finish,  # noqa: E402
                     fresh_home, free_port, http, read_lines, skipped)
 
 home = fresh_home()
@@ -117,4 +117,45 @@ else:
     skipped("the page without its map library", "no node or playwright here")
 
 tiles.stop()
+
+# ---------------------------------------------------------------- traffic, when the world misbehaves
+import core  # noqa: E402
+import net  # noqa: E402
+
+fz = FakeZet(n_vehicles=1)
+core.FEED_URL, core.STATIC_URL = fz.feed_url, fz.static_url
+core.fetch_feed(max_age=0)
+fz.stop()
+f = core.fetch_feed(max_age=0)
+check("ZET unreachable with a copy on disk: the copy is used, and says it is stale", f["how"] == "cache" and f.get("stale") and len(f["vehicles"]) == 1, f.get("stale"))
+
+fz = FakeZet()
+core.FEED_URL, core.STATIC_URL = fz.feed_url, fz.static_url
+idx = core.ensure_static(progress=False)
+check("no timetable yet: it is downloaded, once", idx["version"] == "000396" and len(fz.count("GET", "/static", 200)) == 1)
+idx = core.ensure_static(progress=False)
+check("asked again the same day: nothing is asked of ZET at all", len(fz.count(path="/static")) == 1)
+idx = core.ensure_static(progress=False, max_age=0)
+check("asked again when due: one HEAD, no download", len(fz.count("HEAD", "/static")) == 1 and len(fz.count("GET", "/static")) == 1, fz.log)
+fz.set_static(gtfs_zip("000397", pad=5000))
+idx = core.ensure_static(progress=False, max_age=0)
+check("ZET publishes a new timetable: it comes, and the new version is used", idx["version"] == "000397"
+      and len(fz.count("GET", "/static", 200)) == 2, (idx.get("version"), fz.log))
+
+fz.honour_conditionals = False
+before = len(fz.count("GET", "/static", 200))
+idx = core.ensure_static(progress=False, max_age=0)
+check("a server that ignores 'has it changed?': the HEAD's ETag and size still spare the download",
+      len(fz.count("GET", "/static", 200)) == before, fz.log[-3:])
+fz.honour_conditionals = True
+
+import news  # noqa: E402
+news.FEEDS = [("Test", "http://127.0.0.1:%d/rss" % fz.port)]
+news.fetch_headlines(fresh=0)
+news.fetch_headlines(fresh=0)
+check("a news feed asked twice: the second answer is 'not changed', no body", len(fz.count("GET", "/rss", 200)) == 1 and len(fz.count("GET", "/rss", 304)) == 1, fz.log[-3:])
+news.fetch_headlines(fresh=600)
+check("and within its fresh time it is not asked at all", len(fz.count("GET", "/rss")) == 2)
+fz.stop()
+
 finish("test 3, the ugly cases")

@@ -141,13 +141,19 @@ label.set{display:block;margin:12px 0 4px;color:var(--dim)}
     <label><input type="radio" name="map" value="own">My own server</label>
   </div>
   <label class="set" for="s-tiles">Map tiles address, empty = OpenStreetMap. Your own map server works too, e.g. http://127.0.0.1:PORT/{z}/{x}/{y}.png</label><input type="text" id="s-tiles" autocomplete="off">
+  <h2>Data</h2>
+  <p class="note">Mobile data. The live feed is asked for only this often; a copy younger than that is used, and ZET is asked "has it changed?" so an unchanged answer costs nothing. The timetable (13 MB) is checked once a day and downloaded only when ZET changes it.</p>
+  <div class="card" id="traffic"><b>Used today</b> <span class="tag" id="t-total">0 B</span><div class="apis" id="t-rows"></div><div class="note" id="t-now"></div></div>
+  <label class="set" for="s-poll">Live feed while this page is open (seconds)</label><input type="number" id="s-poll">
+  <label class="set" for="s-idle">Live feed with no page open, by day (minutes)</label><input type="number" id="s-idle">
+  <label class="set" for="s-night">Live feed with no page open, at night 00:00 to 04:30 (minutes)</label><input type="number" id="s-night">
   <h2>Walking</h2>
   <label class="set" for="s-walk">Walking speed (km/h)</label><input type="number" step="0.5" id="s-walk">
   <label class="set" for="s-max">Longest walk to a stop (metres)</label><input type="number" step="100" id="s-max">
   <label class="set" for="s-buf">Arrive at the stop this early (minutes)</label><input type="number" id="s-buf">
   <label class="set" for="s-lay">Turnaround at the last stop (minutes)</label><input type="number" id="s-lay">
   <div class="row" style="margin-top:16px"><button class="btn" id="b-save" type="button">Save settings</button><span class="note" id="savemsg"></span></div>
-  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V8</a>
+  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V9</a>
 </section>
 
 <nav id="tabs">
@@ -251,7 +257,10 @@ async function poll() {
     drawVehicles();
   } catch (e) { $("status").innerHTML = "<span class='warn'>The app server is not answering. Is zet still running in Termux?</span>"; }
 }
-setInterval(poll, 10000); poll();
+// Only while the page is on screen: a tab left open in the background must not keep the server on its
+// fast (mobile data) clock. Coming back to the page asks at once.
+setInterval(() => { if (!document.hidden) poll(); }, 10000); poll();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 
 // ---------------------------------------------------------------- my position and near me
 let watchId = null;
@@ -322,7 +331,7 @@ async function near() {
     map.fitBounds([[me.lat, me.lon], [o.lat, o.lon]], {padding: [60, 60], maxZoom: 17});
   });
 }
-setInterval(() => { if (view === "near" && me) near(); }, 20000);
+setInterval(() => { if (view === "near" && me && !document.hidden) near(); }, 20000);
 
 // ---------------------------------------------------------------- lines
 function lineCard(d) {
@@ -425,11 +434,22 @@ async function settings() {
   $("s-buf").value = s.buffer_min; $("s-lay").value = s.layover_min; $("s-tiles").value = s.tiles || "";
   document.querySelectorAll("#s-map input").forEach(r => r.checked = r.value === s.map);
   $("ver").textContent = "V" + s.version;
+  $("s-poll").value = s.poll_seconds; $("s-idle").value = s.idle_minutes; $("s-night").value = s.night_minutes;
+  traffic();
   renderKeys(s.ring);
   renderGoogle(s.google);
 }
 const STATE_WORD = {works: "works", valid: "valid", "no credit": "no credit", rejected: "rejected", throttled: "throttled", unclear: "unclear",
                     "not enabled": "not enabled", restricted: "restricted", "new": "not tested"};
+const SRC = {feed: "live feed", timetable: "timetable", news: "news feeds"};
+async function traffic() {
+  const t = await api("/api/traffic");
+  if (t.error) return;
+  $("t-total").textContent = t.total_s;
+  $("t-rows").innerHTML = ["feed", "timetable", "news"].map(k => { const v = t.sources[k] || {bytes_s: "0 B", net: 0, same: 0, cache: 0};
+    return "<b>" + SRC[k] + "</b> " + esc(v.bytes_s) + ", " + v.net + " down, " + v.same + " not changed, " + v.cache + " copies used"; }).join("<br>");
+  $("t-now").textContent = "Now asking for the live feed every " + (t.interval >= 60 ? Math.round(t.interval / 60) + " min" : t.interval + " s") + (t.watching ? ", because a page is open." : ", nobody looking.");
+}
 function renderGoogle(g) {
   const has = !!(g && g.has_key);
   $("gfp").textContent = has ? g.fp : "no key yet";
@@ -476,7 +496,7 @@ $("b-gdel").onclick = async () => {
 };
 $("b-save").onclick = async () => {
   const r = await api("/api/settings", {language: $("s-lang").value, ai_minutes: $("s-ai").value, news_minutes: $("s-news").value,
-    map: (document.querySelector("#s-map input:checked") || {}).value, models: $("s-models").value, walk_kmh: $("s-walk").value, max_walk_m: $("s-max").value, buffer_min: $("s-buf").value, layover_min: $("s-lay").value, tiles: $("s-tiles").value.trim()});
+    map: (document.querySelector("#s-map input:checked") || {}).value, poll_seconds: $("s-poll").value, idle_minutes: $("s-idle").value, night_minutes: $("s-night").value, models: $("s-models").value, walk_kmh: $("s-walk").value, max_walk_m: $("s-max").value, buffer_min: $("s-buf").value, layover_min: $("s-lay").value, tiles: $("s-tiles").value.trim()});
   $("savemsg").textContent = r.error ? r.error : "Saved.";
   if (!r.error) { settings(); tilesFrom(r); }
   setTimeout(() => $("savemsg").textContent = "", 3000);

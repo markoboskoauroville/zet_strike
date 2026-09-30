@@ -1,6 +1,6 @@
 # ZET Strike: handover
 
-    version      V8 (30.9.2026)
+    version      V9 (30.9.2026)
     repository   markoboskoauroville/zet_strike (public)
     command      zet (the server; zet map is the same), zet now (the board in the terminal)
     port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
@@ -17,6 +17,32 @@
 
 Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
 (the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## V9 (30.9.2026): mobile data
+
+Marko, 30.9.2026: *"this app unnecessarily downloads the stream from ZET every time it runs ... If
+it's fresh enough ... you don't download it every second ... optimize my traffic. I'm working from
+mobile phone internet."*
+
+What V8 spent, and what V9 does instead (`app/net.py`, one door for every download):
+
+| | V8 | V9 |
+|---|---|---|
+| live feed, server | every 20 s, day and night, page open or not | 20 s only while a page is ON SCREEN; none open: 5 min by day, 15 min 00:00 to 04:30 (Settings, Data) |
+| live feed, `zet now` | 1 to 3 downloads every run | a copy under 20 s old (the server's or the last run's) is used; with 0 vehicles no movement sample |
+| any feed request | the whole body, uncompressed | `If-Modified-Since`: unchanged is a 304 with no body; gzip |
+| timetable, 13 MB | again whenever the copy was 6 h old; every `zet update`; every install | asked once a day with a HEAD (ETag, date, size); downloaded only when ZET changed it; `zet update timetable force` to insist |
+| news, 8 RSS feeds | all of them every 10 min, always | `If-None-Match`/`If-Modified-Since`; hourly with no page open |
+| a background Chrome tab | kept the server on the fast clock | asks only while the page is visible |
+
+`zet data` and the Data card in Settings count what came over the network today, per source
+(bodies only; headers, a few hundred bytes each, are not counted). A phone coming from V8 is not
+charged the 13 MB again: its saved zip is matched to ZET's Content-Length by one HEAD.
+
+**Not known yet:** whether zet.hr answers 304 and sends ETag / Last-Modified / gzip at all. The code
+works either way (a copy is still used when young enough, and the HEAD falls back to the size), but
+how much is saved per request is only measured against a stand-in, never against zet.hr, which the
+cloud machine cannot reach. `zet data` on the phone will say.
 
 ## V8 (30.9.2026): `zet` alone is the server
 

@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""core.py - ZET Strike V8 engine: live feed, timetable, line catalog, trip planner, event log."""
+"""core.py - ZET Strike V9 engine: live feed, timetable, line catalog, trip planner, event log."""
 import csv
 import hashlib
 import io
@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import unicodedata
+import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -31,8 +32,8 @@ EVENTS_FILE = os.path.join(APP_DIR, "events.jsonl")
 FLEET_FILE = os.path.join(APP_DIR, "fleet.json")
 FEED_URL = os.environ.get("ZET_FEED_URL", "https://www.zet.hr/gtfs-rt-protobuf")
 STATIC_URL = os.environ.get("ZET_STATIC_URL", "https://www.zet.hr/gtfs-scheduled/latest")
-UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/8"
-VERSION = 8
+UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/9"
+VERSION = 9
 SCHEMA = 6          # bump when index.json / lines.json layout changes
 ROUTE_TRAM = 0
 PARK_M = 400        # further than this from its own route = parked, not in service
@@ -45,6 +46,9 @@ DEFAULT_CONFIG = {
     "buffer_min": 2,
     "layover_min": 4,
     "news_minutes": 10,
+    "poll_seconds": 20,     # live feed while a page is open
+    "idle_minutes": 5,      # ... and with no page open, by day
+    "night_minutes": 15,    # ... and at night, 00:00 to 04:30
     "ai_minutes": 30,
     "language": "en",
     "tiles": "",
@@ -225,11 +229,26 @@ def norm(text):
 
 
 # ---------------------------------------------------------------- live feed
-def fetch_feed(timeout=15):
+FEED_FRESH = 20          # seconds: a feed copy younger than this is used without asking ZET
+
+
+def feed_interval(cfg, watching, dt=None):
+    """How often the server asks ZET for the live feed. Every 20 s while a page is open and looking;
+    nobody looking, every 5 minutes by day and every 15 at night (00:00 to 04:30, when almost nothing
+    runs). All three are settings (poll_seconds, idle_minutes, night_minutes)."""
+    if watching:
+        return num(cfg, "poll_seconds", 10, 300)
+    dt = dt or now_zagreb()
+    night = dt.hour < 4 or (dt.hour == 4 and dt.minute < 30)
+    return 60 * (num(cfg, "night_minutes", 1, 120) if night else num(cfg, "idle_minutes", 1, 60))
+
+
+def fetch_feed(timeout=15, max_age=FEED_FRESH):
+    """The live feed, through net.fetch: a copy younger than max_age (shared by the server and every
+    zet command) is used without a download; older, ZET is asked, gzip, with If-Modified-Since."""
     from google.transit import gtfs_realtime_pb2
-    req = urllib.request.Request(FEED_URL, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = r.read()
+    import net
+    data, info = net.fetch("feed", FEED_URL, max_age, timeout=timeout)
     feed = gtfs_realtime_pb2.FeedMessage()
     feed.ParseFromString(data)
     vehicles, updates, seen = [], {}, set()
@@ -261,7 +280,8 @@ def fetch_feed(timeout=15):
                 "ts": v.timestamp or feed.header.timestamp,
             })
     ts = feed.header.timestamp or int(time.time())
-    return {"ts": ts, "vehicles": vehicles, "updates": updates, "bytes": len(data)}
+    return {"ts": ts, "vehicles": vehicles, "updates": updates, "bytes": len(data), "how": info["how"],
+            "wire": info["bytes"], "stale": info.get("stale")}
 
 
 # ---------------------------------------------------------------- static timetable
@@ -283,10 +303,70 @@ def _cached(path, default):
     return data
 
 
+STATIC_META = os.path.join(APP_DIR, "static_meta.json")
+STATIC_CHECK = 24 * 3600    # the timetable is asked about at most once a day; it changes a few times a month
+
+
+def _static_sig(headers, url):
+    h = {k.lower(): v for k, v in headers.items()}
+    return {"url": url, "etag": h.get("etag"), "modified": h.get("last-modified"), "length": h.get("content-length")}
+
+
+def _static_same(old, new):
+    """Unchanged when every fact both answers carry agrees and at least one of them is there."""
+    keys = [k for k in ("etag", "modified", "length") if old.get(k) and new.get(k)]
+    if old.get("url") != new.get("url") and old.get("url") and new.get("url"):
+        return False                      # 'latest' now points at another file
+    return bool(keys) and all(old[k] == new[k] for k in keys)
+
+
+def static_unchanged():
+    """A HEAD request (a few hundred bytes) asking whether the timetable zip changed since the copy we
+    have. True / False, or None when the server does not say (then the download decides, conditionally)."""
+    if not os.path.exists(STATIC_ZIP):
+        return None
+    old = load_json(STATIC_META, {})
+    if not isinstance(old, dict) or not old:
+        old = {"length": str(os.path.getsize(STATIC_ZIP))}     # a copy from before V9: its size is what we know
+    import net
+    try:
+        req = urllib.request.Request(STATIC_URL, method="HEAD", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            new = _static_sig(dict(r.headers), r.geturl())
+    except Exception:
+        net.count("timetable", 0, "fail")
+        return None
+    same = _static_same(old, new)
+    net.count("timetable", 0, "same" if same else "net")
+    if same:
+        save_json(STATIC_META, new)
+    return same if any(new.get(k) for k in ("etag", "modified", "length")) else None
+
+
 def _download(dest, progress=True):
+    """The zip, with If-None-Match / If-Modified-Since when there is a copy: a 304 costs nothing and
+    returns False. True when a new zip was written."""
+    import net
     tmp = dest + ".part"
-    req = urllib.request.Request(STATIC_URL, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=180) as r, open(tmp, "wb") as f:
+    h = {"User-Agent": UA}
+    old = load_json(STATIC_META, {})
+    old = old if isinstance(old, dict) else {}
+    if os.path.exists(dest):
+        if old.get("etag"):
+            h["If-None-Match"] = old["etag"]
+        if old.get("modified"):
+            h["If-Modified-Since"] = old["modified"]
+    req = urllib.request.Request(STATIC_URL, headers=h)
+    try:
+        r = urllib.request.urlopen(req, timeout=180)
+    except urllib.error.HTTPError as e:
+        if e.code == 304:
+            net.count("timetable", 0, "same")
+            return False
+        raise
+    got = 0
+    with r, open(tmp, "wb") as f:
+        sig = _static_sig(dict(r.headers), r.geturl())
         total = int(r.headers.get("Content-Length") or 0)
         got = shown = 0
         while True:
@@ -301,10 +381,13 @@ def _download(dest, progress=True):
                 sys.stderr.flush()
     if progress:
         sys.stderr.write("\n")
+    net.count("timetable", got, "net")
     with zipfile.ZipFile(tmp) as z:
         if "stop_times.txt" not in z.namelist():
             raise ValueError("timetable zip has no stop_times.txt")
     os.replace(tmp, dest)
+    save_json(STATIC_META, sig)
+    return True
 
 
 def _text(z, name):
@@ -413,8 +496,10 @@ def load_lines():
     return ln if isinstance(ln, dict) and "routes" in ln else None
 
 
-def ensure_static(force=False, max_age=6 * 3600, progress=True):
-    """Timetable index + line catalog. Refresh from ZET when stale; keep the saved copy when offline."""
+def ensure_static(force=False, max_age=STATIC_CHECK, progress=True):
+    """Timetable index + line catalog. At most once a day (max_age) ZET is asked whether the zip changed,
+    by a HEAD and then a conditional download; the 13 MB come only when it really did change, or with
+    force. Offline, the saved copy is kept."""
     with FileLock("static"):
         idx = load_index()
         lines = load_lines()
@@ -436,7 +521,12 @@ def ensure_static(force=False, max_age=6 * 3600, progress=True):
             return idx
         try:
             os.makedirs(APP_DIR, exist_ok=True)
-            _download(STATIC_ZIP, progress)
+            if idx and have_zip and lines_ok and not force and (static_unchanged() or not _download(STATIC_ZIP, progress)):
+                idx["checked"] = time.time()          # asked, unchanged: nothing downloaded
+                save_json(INDEX_FILE, idx)
+                return idx
+            if force or not (idx and have_zip):
+                _download(STATIC_ZIP, progress)
             new = _build_index(STATIC_ZIP)
             if idx and idx.get("version") == new["version"] and lines_ok:
                 idx["checked"] = time.time()

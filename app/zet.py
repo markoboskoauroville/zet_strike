@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""zet - ZET Strike V8 terminal: what runs, where to catch it, what the lines are, and the strike news."""
+"""zet - ZET Strike V9 terminal: what runs, where to catch it, what the lines are, and the strike news."""
 import argparse
 import getpass
 import json
@@ -117,7 +117,7 @@ def live(idx, lines, cfg, quick, state=None):
                 sys.stderr.write("\r  measuring movement %2ds " % left)
                 sys.stderr.flush()
                 time.sleep(1)
-            feed = core.fetch_feed()
+            feed = core.fetch_feed(max_age=0)      # the second sample must be new, or nothing moved
             vs = core.snapshot(idx, lines, feed, state, cfg)
             # a vehicle that sends no new position within ~20 s is reported as it is, not waited for
             if not [v for v in vs if v["status"] == "NEW" and not v["parked"]] or time.time() - started > 17:
@@ -215,7 +215,7 @@ def cmd_watch(idx, lines, cfg, args):
                 if time.time() - last_news > core.num(cfg, "news_minutes", 2, 240) * 60:
                     last_news = time.time()
                     try:
-                        news.fetch_headlines()
+                        news.fetch_headlines(fresh=core.num(cfg, "news_minutes", 2, 240) * 60 - 30)
                     except Exception:
                         pass
                 out = render_board(cfg, feed, vs, args, footer_events=5)
@@ -405,7 +405,7 @@ def render_summary(f, s):
 
 def cmd_news(idx, lines, cfg, args):
     sys.stderr.write("  collecting headlines...\r")
-    items, rep = news.fetch_headlines()
+    items, rep = news.fetch_headlines(fresh=0 if args.refresh else 300)      # a copy under 5 min old is enough
     sys.stderr.write(" " * 32 + "\r")
     s = news.last_summary()
     meta = None
@@ -577,7 +577,7 @@ def cmd_day(idx, lines, cfg, args):
     return 0
 
 
-HELP = """zet, ZET Strike V8
+HELP = """zet, ZET Strike V9
 
   zet                 the server: map, near me, lines, news, log and settings in Chrome (O A U R Q)
   zet now             what runs now, with next stops, here in the terminal
@@ -593,7 +593,9 @@ HELP = """zet, ZET Strike V8
   zet keys            Gemini keys (add, test, del)
   zet keys google     the Google Maps key (paste, test, del)
   zet day             every vehicle seen today
-  zet update          newest version from GitHub, then the timetable
+  zet data            what came over the network today (feed, timetable, news)
+  zet update          newest version from GitHub; asks whether the timetable changed
+  zet update timetable force   the timetable again even if unchanged (13 MB)
   zet update check    only look, change nothing
   options: -q skip movement check, -a show parked, -n 10 more stops
   zet map is the same as zet (the server)
@@ -630,7 +632,7 @@ def main():
         return 0
     cmds = {"watch": cmd_watch, "w": cmd_watch, "near": cmd_near, "n": cmd_near, "lines": cmd_lines,
             "line": cmd_lines, "l": cmd_lines, "news": cmd_news, "log": cmd_log, "keys": cmd_keys,
-            "key": cmd_keys, "day": cmd_day, "d": cmd_day, "update": None, "u": None}
+            "key": cmd_keys, "day": cmd_day, "d": cmd_day, "update": None, "u": None, "data": cmd_data}
     mode, args.lines, args.rest = "board", [], []
     if args.words and args.words[0] in BOARD_WORDS:
         args.lines = args.words[1:]
@@ -643,6 +645,8 @@ def main():
         return cmd_keys(None, None, cfg, args)
     if mode in ("update", "u"):
         return cmd_update(args.rest)
+    if mode == "data":
+        return cmd_data(None, None, cfg, args)
     idx, lines = load_static()
     try:
         if mode == "board":
@@ -654,6 +658,27 @@ def main():
     except Exception as e:
         print(WARN + "problem: %s" % e + R)
         return 1
+
+
+def cmd_data(idx, lines, cfg, args):
+    """zet data: what came over the network today, per source."""
+    import net
+    t = net.today()
+    f = Frame()
+    header(f, cfg, "data used today")
+    f.sep()
+    names = {"feed": "live feed", "timetable": "timetable", "news": "news feeds"}
+    total = 0
+    for src in ("feed", "timetable", "news"):
+        v = t.get(src, {})
+        total += v.get("bytes", 0)
+        f.row((" %-11s" % names[src], H), ("%9s" % net.human(v.get("bytes", 0)), OK),
+              ("  %d down, %d not changed, %d copies used" % (v.get("net", 0), v.get("same", 0), v.get("cache", 0)), DIM))
+    f.sep()
+    f.row((" together    ", H), ("%9s" % net.human(total), OK), ("  bodies only, headers not counted", DIM))
+    f.bottom()
+    emit(f.lines)
+    return 0
 
 
 def cmd_update(rest):
@@ -680,7 +705,9 @@ def cmd_update(rest):
             code = 1
     if "check" not in rest:
         try:
-            idx = core.ensure_static(force=True)
+            # asked whether it changed (a HEAD, a conditional download): the 13 MB come only when it did,
+            # or with `zet update timetable force`
+            idx = core.ensure_static(force="force" in rest, max_age=0)
             print("  timetable version %s, %d lines, %d stops" % (idx["version"], len(idx["routes"]), len(idx["stops"])))
         except Exception as e:
             print(WARN + "  timetable refresh failed: %s" % e + R)

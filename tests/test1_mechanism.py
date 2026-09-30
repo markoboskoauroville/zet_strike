@@ -8,7 +8,7 @@ import stat
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import APP, check, client, fake_key, finish, free_port, fresh_home  # noqa: E402
+from common import APP, FakeZet, check, client, fake_key, finish, free_port, fresh_home  # noqa: E402
 
 fresh_home()
 sys.path.insert(0, APP)
@@ -79,5 +79,43 @@ import vendor  # noqa: E402
 
 check("a map library that fails its checksum is not accepted", not vendor._ok("leaflet.js", b"console.log('not leaflet')"))
 check("only the two known files are served", vendor.get("../secrets/google_key") is None and vendor.get("other.js") is None)
+
+
+# ---------------------------------------------------------------- traffic: nothing downloaded twice
+import time  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+import core  # noqa: E402
+import net  # noqa: E402
+
+fz = FakeZet(n_vehicles=2)
+core.FEED_URL = fz.feed_url
+f1 = core.fetch_feed(max_age=20)
+check("the first feed comes over the network, gzip, and parses", f1["how"] == "net" and len(f1["vehicles"]) == 2
+      and fz.count("GET", "/feed", 200) and f1["wire"] < len(fz.feed), (f1["how"], f1["wire"], len(fz.feed)))
+f2 = core.fetch_feed(max_age=20)
+check("asked again within 20 s: the copy on disk, no request at all", f2["how"] == "cache" and len(fz.count("GET", "/feed")) == 1
+      and len(f2["vehicles"]) == 2)
+f3 = core.fetch_feed(max_age=0)
+check("older than wanted, unchanged at ZET: a 304, no body", f3["how"] == "same" and fz.count("GET", "/feed", 304) and len(f3["vehicles"]) == 2)
+fz.new_feed(n_vehicles=3)
+f4 = core.fetch_feed(max_age=0)
+check("changed at ZET: the new feed comes", f4["how"] == "net" and len(f4["vehicles"]) == 3)
+t = net.today()["feed"]
+check("today's tally counts what came over the wire, not what was used", t["bytes"] == fz.body_bytes("/feed") and t["net"] == 2
+      and t["same"] == 1 and t["cache"] == 1, (t, fz.body_bytes("/feed")))
+fz.stop()
+
+cfg = core.load_config()
+z = lambda h, m=0: datetime(2026, 9, 30, h, m)
+check("the server's clock: 20 s with a page open, day or night", core.feed_interval(cfg, True, z(14)) == 20 and core.feed_interval(cfg, True, z(2)) == 20)
+check("no page open: 5 min by day", core.feed_interval(cfg, False, z(14)) == 300 and core.feed_interval(cfg, False, z(4, 30)) == 300)
+check("no page open at night (00:00 to 04:30): 15 min", core.feed_interval(cfg, False, z(0, 5)) == 900 and core.feed_interval(cfg, False, z(4, 29)) == 900)
+
+same = core._static_same
+check("the timetable is unchanged when ETag, date and size agree", same({"etag": "a", "modified": "m", "length": "9"}, {"etag": "a", "modified": "m", "length": "9", "url": "u"}))
+check("changed when the ETag differs", not same({"etag": "a", "length": "9"}, {"etag": "b", "length": "9"}))
+check("changed when 'latest' points at another file", not same({"url": "x/396.zip", "length": "9"}, {"url": "x/397.zip", "length": "9"}))
+check("unknown (never 'same') when the server says nothing", not same({"etag": "a"}, {}))
 
 finish("test 1, the mechanisms")

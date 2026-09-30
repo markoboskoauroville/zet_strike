@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""app.py - ZET Strike V8 in Chrome (zet, the server): live map, near me, lines, news desk, event log, settings.
+"""app.py - ZET Strike V9 in Chrome (zet, the server): live map, near me, lines, news desk, event log, settings.
 
 A monitor thread polls the ZET feed every 20 s, writes what changed into the event log, collects headlines
 every few minutes and asks Gemini for a fresh summary when something new happened. Pages only read memory.
@@ -38,19 +38,22 @@ LOCK = threading.Lock()
 STATE = {}
 JOBS = {"news": False, "ai": False, "last_error": None}
 STATIC = {"idx": None, "lines": None}
-POLL = int(os.environ.get("ZET_POLL", "20"))
+POLL = int(os.environ.get("ZET_POLL") or 0)     # tests only: a fixed interval overriding feed_interval
+WATCH = {"t": 0.0}          # when a page last asked for live data: the server polls fast only while someone looks
+WAKE = threading.Event()    # set when a page opens after a quiet spell, so it does not wait for the slow timer
+WATCHING_S = int(os.environ.get("ZET_WATCHING_S") or 60)   # tests shorten it
 LIVE_PORT = int(os.environ.get("ZET_PORT") or 0) or 8100    # the port actually bound; set in main before serving
 TILE_TOKEN = pysecrets.token_urlsafe(12)   # in the Google tile address only the page can read (/api/settings)
 
 
 # ---------------------------------------------------------------- background work
-def run_news(ai):
+def run_news(ai, fresh=0):
     if JOBS["news"]:
         return
     JOBS["news"] = True
     JOBS["last_error"] = None
     try:
-        news.fetch_headlines()
+        news.fetch_headlines(fresh=fresh)
     except Exception as e:
         JOBS["last_error"] = "headlines: %s" % e
     finally:
@@ -80,17 +83,36 @@ def something_new_since(t):
     return bool(core.read_events(1, since=t, kinds={"fleet", "lines", "news"}))
 
 
+def watching():
+    return time.time() - WATCH["t"] < WATCHING_S
+
+
+def looked_at():
+    """A page asked for live data. If the copy in memory is older than the fast interval, wake the loop."""
+    quiet = not watching()
+    WATCH["t"] = time.time()
+    cfg = core.load_config()
+    if quiet or time.time() - LIVE["t"] > core.feed_interval(cfg, True):
+        WAKE.set()
+
+
 def monitor():
+    """The live feed on a clock that follows whether anybody is looking (core.feed_interval): 20 s with
+    a page open, 5 min by day and 15 min at night without. Every fetch goes through net.fetch, so a copy
+    another zet command fetched a moment ago is used as it is. The timetable is asked about once a day;
+    the headlines every news_minutes while watched, hourly when not."""
     last_news = last_ai_try = 0.0
     feed_ok = True
     while True:
+        cfg = core.load_config()
+        looking = watching()
+        interval = POLL or core.feed_interval(cfg, looking)
         try:
-            cfg = core.load_config()
             idx = STATIC["idx"]
-            if idx is None or time.time() - idx.get("checked", 0) > 6 * 3600:
+            if idx is None or time.time() - idx.get("checked", 0) > core.STATIC_CHECK:
                 idx = core.ensure_static(progress=False)
                 STATIC.update(idx=idx, lines=core.load_lines())
-            feed = core.fetch_feed()
+            feed = core.fetch_feed(max_age=max(5, min(interval, core.num(cfg, "poll_seconds", 10, 300)) - 2))
             vs = core.snapshot(idx, STATIC["lines"], feed, STATE, cfg)
             core.record_fleet(vs, feed["ts"])
             core.log_observed(vs)
@@ -106,10 +128,10 @@ def monitor():
                 core.log_event("system", "ZET feed problem: %s" % str(e)[:160])
                 feed_ok = False
         try:
-            cfg = core.load_config()
-            if time.time() - last_news > core.num(cfg, "news_minutes", 2, 240) * 60:
+            news_min = core.num(cfg, "news_minutes", 2, 240) if looking else max(60, core.num(cfg, "news_minutes", 2, 240))
+            if time.time() - last_news > news_min * 60:
                 last_news = time.time()
-                threading.Thread(target=run_news, args=(False,), daemon=True).start()
+                threading.Thread(target=run_news, args=(False, news_min * 60 - 30), daemon=True).start()
             ai_min = core.num(cfg, "ai_minutes", 0, 1440)
             s = news.last_summary()
             since = s["t"] if s else 0
@@ -119,7 +141,8 @@ def monitor():
                 threading.Thread(target=run_ai, daemon=True).start()
         except Exception:
             pass
-        time.sleep(POLL)
+        WAKE.wait(interval)
+        WAKE.clear()
 
 
 # ---------------------------------------------------------------- helpers
@@ -219,6 +242,7 @@ def tile(z, x, y):
 
 @app.route("/api/live")
 def api_live():
+    looked_at()
     live, vs = snapshot_copy()
     cfg = core.load_config()
     now = core.now_zagreb()
@@ -234,6 +258,7 @@ def api_near():
             raise ValueError
     except Exception:
         return jsonify({"error": "lat and lon are needed"}), 400
+    looked_at()
     live, vs = snapshot_copy()
     if not live["ready"]:
         return jsonify({"error": live["error"] or "not ready", "options": []})
@@ -304,7 +329,7 @@ def api_news_refresh():
     if not guard():
         return jsonify({"error": "forbidden"}), 403
     ai = bool((request.get_json(silent=True) or {}).get("ai"))
-    threading.Thread(target=run_news, args=(ai,), daemon=True).start()
+    threading.Thread(target=run_news, args=(ai, 0), daemon=True).start()     # asked by hand: ask the sites now
     return jsonify({"started": True, "ai": ai})
 
 
@@ -326,7 +351,8 @@ def api_log():
 
 
 SETTABLE = {"walk_kmh": (2, 8), "max_walk_m": (200, 5000), "buffer_min": (0, 15), "layover_min": (0, 30),
-            "news_minutes": (2, 240), "ai_minutes": (0, 1440)}
+            "news_minutes": (2, 240), "ai_minutes": (0, 1440),
+            "poll_seconds": (10, 300), "idle_minutes": (1, 60), "night_minutes": (1, 120)}
 
 
 @app.route("/api/settings", methods=["GET", "POST"])
@@ -389,6 +415,18 @@ def api_keys_delete():
     if not guard():
         return jsonify({"error": "forbidden"}), 403
     return jsonify({"deleted": news.remove_key(str((request.get_json(silent=True) or {}).get("fp", "")))})
+
+
+@app.route("/api/traffic")
+def api_traffic():
+    """What came over the network today, per source: bytes, downloads, 'not changed' answers, copies used."""
+    import net
+    t = net.today()
+    total = sum(v.get("bytes", 0) for v in t.values())
+    cfg = core.load_config()
+    return jsonify({"today": t, "total": total, "total_s": net.human(total),
+                    "sources": {k: dict(v, bytes_s=net.human(v.get("bytes", 0))) for k, v in t.items()},
+                    "watching": watching(), "interval": core.feed_interval(cfg, watching())})
 
 
 @app.route("/api/google")

@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import (APP, Console, FakeTiles, check, console_env, fake_key, fake_opener, finish, fresh_home,  # noqa: E402
+from common import (APP, Console, FakeTiles, FakeZet, check, console_env, fake_key, fake_opener, finish, fresh_home,  # noqa: E402
                     free_port, http, read_lines, reachable, skipped)
 
 home = fresh_home()
@@ -28,7 +28,7 @@ try:
     check("the banner comes up", con.wait_for(r"\[Q\] stop", 20), con.text()[-600:])
     t = con.text()
     check("MA READER's shape: name, where, library, version", all(s in t for s in (
-        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V8")), t[-600:])
+        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V9")), t[-600:])
     check("the five keys, one per line", all(s in t for s in (
         "[O] open in Chrome", "[A] open in the default browser", "[U] update the app", "[R] restart", "[Q] stop")))
     check("plain lines, never a box", not any(ch in t for ch in "┌┐└┘│"))
@@ -48,7 +48,7 @@ try:
     check("no vehicle and the feed unreachable: the API still answers, with the reason", st == 200 and live.get("vehicles") == [] and "feed" in (live.get("error") or ""), live)
     st, body, _ = http(base + "/api/settings", headers=H)
     s = json.loads(body or b"{}")
-    check("settings answer: the port bound, V8, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 8
+    check("settings answer: the port bound, V9, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 9
           and s["google"]["has_key"] and s["google"]["source"] == "environment" and key not in body.decode())
 
     st, img, hdr = http(base + s["google_tiles"].replace("{z}", "3").replace("{x}", "4").replace("{y}", "2"))
@@ -90,7 +90,7 @@ try:
         check("in Chromium at 390 px: no script error, nothing wider than the phone", not out.get("errs") and out.get("width") == 390, out)
         check("the settings show the Google key by fingerprint, Test live, Google choosable", out.get("gfp") == s["google"]["fp"]
               and out.get("gtest") is False and out.get("google") is False, out)
-        check("the version sits at the foot of settings", out.get("ver") == "V8")
+        check("the version sits at the foot of settings", out.get("ver") == "V9")
     else:
         skipped("the page in Chromium", "no node or playwright here")
 
@@ -123,5 +123,64 @@ try:
           and "ZET STRIKE  server" not in t and ("running now" in t or "timetable" in t), (code, t[-400:]))
 finally:
     con.kill()
+
+
+# ---------------------------------------------------------------- traffic: the real server against a stand-in ZET
+# Every request ZET would see is written down by the stand-in, so what is measured is traffic, not intent.
+import time  # noqa: E402
+
+fz = FakeZet(n_vehicles=0)
+home2 = fresh_home()
+os.makedirs(os.environ["ZET_STRIKE_DIR"])
+with open(os.path.join(os.environ["ZET_STRIKE_DIR"], "config.json"), "w") as f:
+    json.dump({"poll_seconds": 10}, f)
+port3 = free_port()
+envz = dict(os.environ, ZET_PORT=str(port3), ZET_NO_CONSOLE="1", ZET_NO_BROWSER="1", ZET_WATCHING_S="6",
+            ZET_FEED_URL=fz.feed_url, ZET_STATIC_URL=fz.static_url)
+envz.pop("ZET_POLL", None)
+srv = subprocess.Popen([sys.executable, os.path.join(APP, "app.py")], env=envz, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    for _ in range(80):
+        if http("http://127.0.0.1:%d/health" % port3, 1)[0] == 200 and fz.count("GET", "/feed"):
+            break
+        time.sleep(0.2)
+    time.sleep(1)
+    check("started: the timetable once, the feed once", len(fz.count("GET", "/static", 200)) == 1 and len(fz.count("GET", "/feed")) == 1, fz.log)
+    time.sleep(7)
+    check("nobody looking: no second feed request in 7 s (the idle clock is 5 min)", len(fz.count("GET", "/feed")) == 1, fz.log)
+    H2 = {"X-ZET": "1"}
+    end = time.time() + 16
+    while time.time() < end:
+        http("http://127.0.0.1:%d/api/live" % port3, 2, headers=H2)
+        time.sleep(2)
+    looked = len(fz.count("GET", "/feed"))
+    check("a page open: the feed is asked for on the 10 s clock", 2 <= looked <= 4, fz.log)
+    check("and ZET answers 'not changed' with no body, so a quiet feed costs nothing", len(fz.count("GET", "/feed", 304)) >= 1, fz.log)
+    time.sleep(6 + 2 * 10 + 1)             # the watching window, then at most the fast rounds already begun
+    settled = len(fz.count("GET", "/feed"))
+    time.sleep(14)
+    check("the page closed: after its window the fast clock stops (nothing in 14 s)", settled <= looked + 2
+          and len(fz.count("GET", "/feed")) == settled, (looked, settled, fz.log))
+    st, body, _ = http("http://127.0.0.1:%d/api/traffic" % port3, headers=H2)
+    tr = json.loads(body or b"{}")
+    wire = fz.body_bytes("/feed") + fz.body_bytes("/static")
+    check("the data card shows what really came over the network", st == 200 and tr["total"] == wire and not tr["watching"], (tr, wire))
+
+    before = len(fz.log)
+    zenv = dict(envz, NO_COLOR="1")
+    r1 = subprocess.run([sys.executable, os.path.join(APP, "zet.py"), "now"], env=zenv, capture_output=True, text=True, timeout=60)
+    mid = len(fz.log)
+    r2 = subprocess.run([sys.executable, os.path.join(APP, "zet.py"), "now"], env=zenv, capture_output=True, text=True, timeout=60)
+    check("`zet now` twice in a row: the second one downloads nothing", "running now" in r2.stdout and len(fz.log) == mid and mid - before <= 1,
+          (fz.log[before:], r2.stdout[-200:], r2.stderr[-200:]))
+    r = subprocess.run([sys.executable, os.path.join(APP, "zet.py"), "update", "timetable"], env=zenv, capture_output=True, text=True, timeout=60)
+    check("`zet update timetable`: asks whether it changed, and the 13 MB do not come again", "timetable version 000396" in r.stdout
+          and len(fz.count("GET", "/static", 200)) == 1 and fz.count("HEAD", "/static"), (r.stdout[-300:], fz.log[-4:]))
+    r = subprocess.run([sys.executable, os.path.join(APP, "zet.py"), "data"], env=zenv, capture_output=True, text=True, timeout=30)
+    check("`zet data` shows today's use per source", "live feed" in r.stdout and "timetable" in r.stdout and "together" in r.stdout, r.stdout[-400:])
+finally:
+    srv.terminate()
+    srv.wait(5)
+    fz.stop()
 
 finish("test 2, the real thing")

@@ -26,10 +26,19 @@ For GPS in `zet near`, also install the Termux:API app from F-Droid.
     zet log              event log of everything the feed and news did
     zet keys             Gemini keys, used in order with fallback
     zet watch            live view
-    zet update           newest version from this repo, then the timetable
+    zet data             what came over the network today
+    zet update           newest version from this repo; asks whether the timetable changed
     zet update check     only look, change nothing
     zet keys google      the Google Maps key: paste, test, del
     zet map              the same as zet
+
+## Mobile data
+
+Every download goes through one copy on disk, shared by the server and every `zet` command. A copy
+young enough is used without asking; older, ZET is asked "has it changed?" and an unchanged answer
+costs no body. The server asks for the live feed every 20 s only while its page is on screen; with
+no page open, every 5 minutes by day and 15 at night (Settings, Data). The 13 MB timetable is
+checked once a day and downloaded only when ZET changes it. `zet data` shows today's use.
 
 ## How updating works
 
@@ -55,7 +64,7 @@ printed.
     ----------------------------------------
      on this phone  http://127.0.0.1:8100
      library        ~/.zet-strike
-     version        V8
+     version        V9
     ----------------------------------------
      [O] open in Chrome
      [A] open in the default browser

@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""news.py - ZET Strike V7 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
+"""news.py - ZET Strike V9 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
 
 Gemini keys follow MANTRA_MANIFEST quota-and-fallback: four verdicts (ok, dead, cool, soft), one classifier
 that reads status AND body AND headers, each key tried at most once per call, resume at the last good key,
@@ -101,20 +101,25 @@ def relevant(item):
     return strike and local
 
 
-def _get(url, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": core.UA, "Accept": "application/rss+xml, application/xml, text/xml, */*"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(3_000_000)
+def _get(url, fresh, timeout=15):
+    """Through net.fetch: a copy younger than `fresh` seconds is used as it is; older, the site is asked
+    whether it changed (an unchanged feed costs no body), gzip."""
+    import net
+    name = "news-" + hashlib.sha1(url.encode()).hexdigest()[:10]
+    body, _info = net.fetch(name, url, fresh, timeout=timeout, limit=3_000_000,
+                            accept="application/rss+xml, application/xml, text/xml, */*")
+    return body
 
 
-def fetch_headlines(max_age_days=4):
-    """Fetch every feed in parallel, keep strike stories, log the new ones. Returns (items, report)."""
+def fetch_headlines(max_age_days=4, fresh=0):
+    """Fetch every feed in parallel, keep strike stories, log the new ones. Returns (items, report).
+    fresh: seconds a saved copy of a feed is still good for (0: always ask, conditionally)."""
     report = {}
 
     def one(src_url):
         src, url = src_url
         try:
-            got = [i for i in parse_feed(_get(url), src) if relevant(i)]
+            got = [i for i in parse_feed(_get(url, fresh), src) if relevant(i)]
             return src, url, got, None
         except Exception as e:
             return src, url, [], str(e)[:120]
