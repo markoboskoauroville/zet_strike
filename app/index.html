@@ -223,7 +223,7 @@ async function poll() {
       "Day " + d.day + ", <b>" + run.length + "</b> in service" + (lines.length ? " on " + esc(lines.join(", ")) : "") +
       (d.feed_age != null ? ", feed " + d.feed_age + " s" : "") + (d.error ? " <span class='warn'>" + esc(d.error) + "</span>" : "");
     drawVehicles();
-  } catch (e) { $("status").innerHTML = "<span class='warn'>The app server is not answering. Is zets still running in Termux?</span>"; }
+  } catch (e) { $("status").innerHTML = "<span class='warn'>The app server is not answering. Is zet map still running in Termux?</span>"; }
 }
 setInterval(poll, 10000); poll();
 

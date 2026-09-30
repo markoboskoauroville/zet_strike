@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""update.py - ZET Strike self update from GitHub (markoboskoauroville/z_strike).
+"""update.py - ZET Strike self update from GitHub (markoboskoauroville/zet_strike).
 Asks GitHub for the newest commit, downloads each file raw at that commit, checks every SHA-256 against
 the repo's app/MANIFEST.json, backs up the running version, then swaps the files in."""
 import hashlib
@@ -11,10 +11,10 @@ import urllib.request
 
 import core
 
-REPO = os.environ.get("ZS_REPO", "markoboskoauroville/z_strike")
+REPO = os.environ.get("ZET_REPO", "markoboskoauroville/zet_strike")
 BRANCH = "main"
-API = os.environ.get("ZS_GITHUB_API", "https://api.github.com")
-RAW = os.environ.get("ZS_GITHUB_RAW", "https://raw.githubusercontent.com")
+API = os.environ.get("ZET_GITHUB_API", "https://api.github.com")
+RAW = os.environ.get("ZET_GITHUB_RAW", "https://raw.githubusercontent.com")
 LOCAL = os.path.join(core.APP_DIR, "VERSION.json")
 BACKUPS = os.path.join(core.APP_DIR, "backup")
 
@@ -93,8 +93,33 @@ def apply(force=False):
             f.write(data)
         os.replace(tmp, os.path.join(core.APP_DIR, name))
     core.save_json(LOCAL, {"version": m.get("version"), "commit": ref, "files": m["files"], "installed": time.time()})
+    migrate()
     olds = sorted(os.listdir(BACKUPS))
     for old in olds[:-5]:
         shutil.rmtree(os.path.join(BACKUPS, old), ignore_errors=True)
     return dict(info, changed=True, backup=dest, files=len(fresh),
                 message="updated to V%s (commit %s)" % (m.get("version"), info["latest_commit"]))
+
+
+def migrate():
+    """The command is called zet. Remove the old zs and zets commands and the old zs.py."""
+    bindir = os.path.join(os.environ.get("PREFIX", "/data/data/com.termux/files/usr"), "bin")
+    zet = os.path.join(core.APP_DIR, "zet.py")
+    if not os.path.exists(zet):
+        return False
+    try:
+        os.makedirs(bindir, exist_ok=True)
+        path = os.path.join(bindir, "zet")
+        with open(path, "w") as f:
+            f.write('#!/data/data/com.termux/files/usr/bin/sh\nexec python "%s" "$@"\n' % zet)
+        os.chmod(path, 0o755)
+        for old in ("zs", "zets"):
+            p = os.path.join(bindir, old)
+            if os.path.exists(p):
+                os.remove(p)
+        old_py = os.path.join(core.APP_DIR, "zs.py")
+        if os.path.exists(old_py):
+            os.remove(old_py)
+        return True
+    except OSError:
+        return False

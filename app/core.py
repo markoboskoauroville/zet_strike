@@ -862,7 +862,7 @@ def record_fleet(vehicles, feed_ts):
 
 
 def log_observed(vehicles):
-    """Raw position samples for the day log (zs day)."""
+    """Raw position samples for the day log (zet day)."""
     path = os.path.join(APP_DIR, "observed-%s.jsonl" % now_zagreb().strftime("%Y%m%d"))
     try:
         with FileLock("observed"):

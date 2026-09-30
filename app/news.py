@@ -399,7 +399,7 @@ def generate(payload, models, timeout=90, counter=None):
                  [(start + j) % len(keys) for j in range(len(keys))]] if keys else []
     meta = {"tried": [], "error": None, "key": None, "model": None}
     if not keys:
-        meta["error"] = "No Gemini key saved. Add one in Settings (or: zs keys add)."
+        meta["error"] = "No Gemini key saved. Add one in Settings (or: zet keys add)."
         return None, meta
     models = [m for m in models if m and m not in gone] or list(models)
     resting = []

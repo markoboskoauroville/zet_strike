@@ -1,12 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# install.sh - ZET Strike (V6), installed straight from github.com/markoboskoauroville/z_strike
-#   curl -fsSL https://raw.githubusercontent.com/markoboskoauroville/z_strike/main/install.sh | bash
-# After install:  zs (terminal)   zets (map in Chrome)   zs update (newest version from GitHub)
+# install.sh - ZET Strike (V6), installed straight from github.com/markoboskoauroville/zet_strike
+#   curl -fsSL https://raw.githubusercontent.com/markoboskoauroville/zet_strike/main/install.sh | bash
+# After install:  zet (terminal)   zet map (map in Chrome)   zet update (newest version from GitHub)
 # Rule 42: plain exit codes, no prompts.  Rule 43: output also in ~/.zet-strike/chain.txt.
 # Rule 46 & 47: Maha-style amber terminal frame.
 set -e
 set -o pipefail
-REPO="markoboskoauroville/z_strike"
+REPO="markoboskoauroville/zet_strike"
 APP_DIR="$HOME/.zet-strike"
 BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 CHAIN="$APP_DIR/chain.txt"
@@ -26,7 +26,7 @@ step "01" "Checking Termux packages..."
 if command -v pkg >/dev/null 2>&1; then
     for p in python curl; do command -v "$p" >/dev/null 2>&1 || pkg install "$p" -y; done
     if ! command -v termux-location >/dev/null 2>&1; then
-        pkg install termux-api -y || warn "termux-api not installed, zs near needs it for GPS"
+        pkg install termux-api -y || warn "termux-api not installed, zet near needs it for GPS"
     fi
 fi
 command -v termux-location >/dev/null 2>&1 || warn "For GPS also install the Termux:API app (F-Droid)."
@@ -68,21 +68,20 @@ PYEOF
 step "04" "Checking Google Transit GTFS bindings..."
 python -c "from google.transit import gtfs_realtime_pb2; print('  bindings ok')"
 
-step "05" "Creating commands zs and zets..."
-rm -f "$BIN_DIR/zs" "$BIN_DIR/zets"
-printf '#!/data/data/com.termux/files/usr/bin/sh\nexec python "%s/zs.py" "$@"\n' "$APP_DIR" > "$BIN_DIR/zs"
-printf '#!/data/data/com.termux/files/usr/bin/sh\nexec python "%s/app.py" "$@"\n' "$APP_DIR" > "$BIN_DIR/zets"
-chmod +x "$BIN_DIR/zs" "$BIN_DIR/zets"
+step "05" "Creating the command zet (and removing the old zs, zets)..."
+rm -f "$BIN_DIR/zs" "$BIN_DIR/zets" "$BIN_DIR/zet" "$APP_DIR/zs.py"
+printf '#!/data/data/com.termux/files/usr/bin/sh\nexec python "%s/zet.py" "$@"\n' "$APP_DIR" > "$BIN_DIR/zet"
+chmod +x "$BIN_DIR/zet"
 
 step "06" "Downloading the ZET timetable (about 13 MB)..."
-python "$APP_DIR/zs.py" update timetable || warn "Timetable download failed, zs retries on its first run."
+python "$APP_DIR/zet.py" update timetable || warn "Timetable download failed, zet retries on its first run."
 
 echo -e "${CB}├─────────────────────────────────────────────────────────────────────────────┤"
 step "OK" "Installation completed."
 echo -e "${CB}└─────────────────────────────────────────────────────────────────────────────┘${CR}"
 echo -e "\n${CS}ZET Strike V6 is ready.${CR}"
-echo -e "${CT}What runs now:         ${CH}zs${CR}"
-echo -e "${CT}Where to catch it:     ${CH}zs near${CR}"
-echo -e "${CT}Strike news:           ${CH}zs news${CR}"
-echo -e "${CT}Map in Chrome:         ${CH}zets${CR}"
-echo -e "${CT}Newest version:        ${CH}zs update${CR}\n"
+echo -e "${CT}What runs now:         ${CH}zet${CR}"
+echo -e "${CT}Where to catch it:     ${CH}zet near${CR}"
+echo -e "${CT}Strike news:           ${CH}zet news${CR}"
+echo -e "${CT}Map in Chrome:         ${CH}zet map${CR}"
+echo -e "${CT}Newest version:        ${CH}zet update${CR}\n"
