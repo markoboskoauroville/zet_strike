@@ -354,6 +354,29 @@ def api_log():
     return jsonify({"events": evs})
 
 
+# V12: every way the map can look. The map button steps through the ticked ones (Settings, Map views).
+VIEW_LIST = [
+    ("osm", "Map", "OpenStreetMap streets, dark", None),
+    ("esri", "Satellite", "Esri World Imagery, no key needed", None),
+    ("google", "Google map", "Google's streets", "google"),
+    ("googlesat", "Google satellite", "Google's imagery", "google"),
+    ("googleterrain", "Google terrain", "hills and roads", "google"),
+    ("own", "My server", "your own tile server, the address below", "tiles"),
+]
+VIEWS = [v[0] for v in VIEW_LIST]
+
+
+def views_of(cfg):
+    """(ticked views, the one shown now). Before V12 there was one map choice: it becomes the first view,
+    with satellite after it."""
+    vs = [v for v in (cfg.get("views") or []) if v in VIEWS]
+    if not vs:
+        old = cfg.get("map") or ("own" if cfg.get("tiles") else "osm")
+        vs = {"google": ["google", "googlesat"], "own": ["own", "esri"]}.get(old, ["osm", "esri"])
+    view = cfg.get("view") if cfg.get("view") in vs else vs[0]
+    return vs, view
+
+
 SETTABLE = {"walk_kmh": (2, 8), "max_walk_m": (200, 5000), "buffer_min": (0, 15), "layover_min": (0, 30),
             "news_minutes": (2, 240), "ai_minutes": (0, 1440),
             "poll_seconds": (10, 300), "idle_minutes": (1, 60), "night_minutes": (1, 120)}
@@ -381,6 +404,15 @@ def api_settings():
                 cfg["models"] = ms
         if data.get("map") in ("osm", "google", "own"):
             cfg["map"] = data["map"]
+        if "views" in data:                          # V12: the views the map button steps through
+            vs = [v for v in (data["views"] if isinstance(data["views"], list) else []) if v in VIEWS]
+            if not vs:
+                return jsonify({"error": "Tick at least one map view."}), 400
+            cfg["views"] = list(dict.fromkeys(vs))
+            if cfg.get("view") not in cfg["views"]:
+                cfg["view"] = cfg["views"][0]
+        if data.get("view") in VIEWS:                # the map button: the view shown now
+            cfg["view"] = data["view"]
         if "tiles" in data:
             t = str(data["tiles"] or "").strip()
             if not t:
@@ -392,10 +424,12 @@ def api_settings():
         core.save_config(cfg)
     out = {k: cfg.get(k) for k in list(SETTABLE) + ["language", "models", "tiles"]}
     out["map"] = cfg.get("map") or ("own" if cfg.get("tiles") else "osm")
+    out["views"], out["view"] = views_of(cfg)
+    out["views_all"] = [{"id": k, "name": n, "what": w, "needs": r} for k, n, w, r in VIEW_LIST]
     out["ring"] = news.ring_status()
     out["google"] = mapkey.status()
     out["google_tiles"] = "/tile/google/{z}/{x}/{y}?t=" + TILE_TOKEN
-    out["tile_urls"] = {s: "/tile/%s/{z}/{x}/{y}?t=%s" % (s, TILE_TOKEN) for s in ("osm", "esri", "google", "googlesat")}
+    out["tile_urls"] = {s: "/tile/%s/{z}/{x}/{y}?t=%s" % (s, TILE_TOKEN) for s in ("osm", "esri", "google", "googlesat", "googleterrain")}
     out["version"] = core.VERSION
     out["port"] = LIVE_PORT
     return jsonify(out)

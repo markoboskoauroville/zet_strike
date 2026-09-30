@@ -241,4 +241,14 @@ check("the old single-key file is gone, the new list is 0600", not os.path.exist
       and _stat.S_IMODE(os.stat(mk10.KEYS_FILE).st_mode) == 0o600 and mk10.saved_keys() == [k9])
 check("and a second key added later does not take its place", mk10.add(["AIza" + "N" * 35])[0] and mk10.status()["fp"] == fp9)
 
+# ---------------------------------------------------------------- V11's one map choice becomes V12's views
+for m in ("app",):
+    sys.modules.pop(m, None)
+sys.path.insert(0, APP)
+import app as app12  # noqa: E402
+check("V11 'map: google' becomes the views Google map, Google satellite", app12.views_of({"map": "google"}) == (["google", "googlesat"], "google"))
+check("V11 with its own tile server keeps it first, satellite after", app12.views_of({"map": "own", "tiles": "http://x/{z}/{x}/{y}"}) == (["own", "esri"], "own"))
+check("a fresh phone: the map, then satellite", app12.views_of({}) == (["osm", "esri"], "osm"))
+check("a view that is no longer ticked is not shown", app12.views_of({"views": ["esri"], "view": "osm"}) == (["esri"], "esri"))
+
 finish("test 4, the upgrade")

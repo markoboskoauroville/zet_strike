@@ -28,7 +28,7 @@ try:
     check("the banner comes up", con.wait_for(r"\[Q\] stop", 20), con.text()[-600:])
     t = con.text()
     check("MA READER's shape: name, where, library, version", all(s in t for s in (
-        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V11")), t[-600:])
+        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V12")), t[-600:])
     check("the five keys, one per line", all(s in t for s in (
         "[O] open in Chrome", "[A] open in the default browser", "[U] update the app", "[R] restart", "[Q] stop")))
     check("plain lines, never a box", not any(ch in t for ch in "┌┐└┘│"))
@@ -39,7 +39,7 @@ try:
     base = "http://127.0.0.1:%d" % port
     st, body, hdr = http(base + "/")
     check("the page answers 200, the whole interface in the first frame", st == 200 and all(s in body for s in (
-        b'id="map"', b'id="gkeyin"', b'id="b-gtest"', b'id="s-map"', b'id="keyin"', b'data-v="set"')))
+        b'id="map"', b'id="gkeyin"', b'id="b-gtest"', b'id="s-views"', b'id="b-view"', b'id="b-close"', b'id="keyin"', b'data-v="set"')))
     st, body, hdr = http(base + "/favicon.svg")
     check("a favicon, never the empty globe", st == 200 and hdr.get("Content-Type", "").startswith("image/svg+xml"))
     H = {"X-ZET": "1"}
@@ -48,7 +48,7 @@ try:
     check("no vehicle and the feed unreachable: the API still answers, with the reason", st == 200 and live.get("vehicles") == [] and "feed" in (live.get("error") or ""), live)
     st, body, _ = http(base + "/api/settings", headers=H)
     s = json.loads(body or b"{}")
-    check("settings answer: the port bound, V11, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 11
+    check("settings answer: the port bound, V12, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 12
           and s["google"]["has_key"] and s["google"]["source"] == "environment" and key not in body.decode())
 
     st, img, hdr = http(base + s["google_tiles"].replace("{z}", "3").replace("{x}", "4").replace("{y}", "2"))
@@ -79,7 +79,7 @@ try:
  await p.goto(%r); await p.waitForTimeout(1500);
  await p.click('#tabs button[data-v="set"]'); await p.waitForTimeout(800);
  const out = {errs, width: await p.evaluate(() => document.documentElement.scrollWidth),
-   gfp: await p.textContent('#gfp'), gtest: await p.isDisabled('#b-gtest'), google: await p.isDisabled('#l-google input'),
+   gfp: await p.textContent('#gfp'), gtest: await p.isDisabled('#b-gtest'), google: await p.isDisabled('#s-views input[value=google]'),
    ver: await p.textContent('#ver'), status: await p.textContent('#status'), leaflet: await p.evaluate(() => typeof L.map)};
  console.log(JSON.stringify(out)); await b.close(); })();""" % (pw, base))
         r = subprocess.run([node, js], capture_output=True, text=True, timeout=60)
@@ -90,7 +90,7 @@ try:
         check("in Chromium at 390 px: no script error, nothing wider than the phone", not out.get("errs") and out.get("width") == 390, out)
         check("the settings show the Google key by fingerprint, Test live, Google choosable", out.get("gfp") == s["google"]["fp"]
               and out.get("gtest") is False and out.get("google") is False, out)
-        check("the version sits at the foot of settings", out.get("ver") == "V11")
+        check("the version sits at the foot of settings", out.get("ver") == "V12")
     else:
         skipped("the page in Chromium", "no node or playwright here")
 
@@ -266,9 +266,33 @@ try:
  const kept = await p.evaluate(() => localStorage.getItem('zet.scale'));
  await p.reload(); await p.waitForTimeout(800);
  const afterReload = await p.evaluate(() => document.documentElement.style.fontSize);
- await p.click('#b-sat'); await p.waitForTimeout(1200);
- const satShown = await p.$$eval('.leaflet-layer.sat img.leaflet-tile-loaded', els => els.length);
- console.log(JSON.stringify({errs, tilesShown, onMap, bigger, smaller, kept, afterReload, tabBefore, tabAfter, satShown}));
+ await p.click('#tabs button[data-v="map"]'); await p.waitForTimeout(400);
+ const label0 = await p.textContent('#b-view');
+ await p.click('#b-view'); await p.waitForTimeout(1500);
+ const label1 = await p.textContent('#b-view');
+ const satShown = await p.$$eval('.leaflet-layer.base img.leaflet-tile-loaded', els => els.filter(i => i.src.includes('/tile/esri/')).length);
+ await p.click('#b-view'); await p.waitForTimeout(600);
+ const label2 = await p.textContent('#b-view');
+ // Settings: Save at the top, Map views first, a way out, and Back works
+ await p.click('#tabs button[data-v="lines"]'); await p.click('#tabs button[data-v="set"]'); await p.waitForTimeout(800);
+ const saveBox = await p.locator('#b-save').boundingBox();
+ const firstHead = await p.$eval('#v-set h2', e => e.textContent);
+ const rows = await p.$$eval('#s-views .vrow', els => els.map(e => ({id: e.querySelector('input').value, on: e.querySelector('input').checked, off: e.classList.contains('off'), now: e.classList.contains('now')})));
+ await p.click('#b-close'); await p.waitForTimeout(500);
+ const afterX = await p.$eval('#tabs button.on', e => e.dataset.v);
+ await p.click('#tabs button[data-v="set"]'); await p.waitForTimeout(500);
+ await p.goBack(); await p.waitForTimeout(600);
+ const afterBack = await p.$eval('#tabs button.on', e => e.dataset.v);
+ await p.click('#tabs button[data-v="set"]'); await p.waitForTimeout(600);
+ await p.evaluate(() => document.querySelector('#v-set').scrollTop = 2000); await p.waitForTimeout(200);
+ const saveStill = await p.locator('#b-save').isVisible() && (await p.locator('#b-save').boundingBox()).y < 150;
+ await p.$$eval('#s-views input:checked', els => els.forEach(e => e.click()));
+ await p.click('#b-save'); await p.waitForTimeout(500);
+ const noneMsg = await p.textContent('#savemsg');
+ await p.check('#s-views input[value=esri]'); await p.click('#b-save'); await p.waitForTimeout(800);
+ const onlySat = await p.textContent('#b-view');
+ console.log(JSON.stringify({errs, tilesShown, onMap, bigger, smaller, kept, afterReload, tabBefore, tabAfter, satShown, label0, label1, label2,
+   saveY: saveBox && saveBox.y, firstHead, rows, afterX, afterBack, saveStill, noneMsg, onlySat}));
  await b.close(); })();""" % (pw, port5))
         r = subprocess.run([node, js], capture_output=True, text=True, timeout=120)
         try:
@@ -282,7 +306,20 @@ try:
         check("the bars do not grow with it", out.get("tabBefore") == out.get("tabAfter"), (out.get("tabBefore"), out.get("tabAfter")))
         check("two fingers together: the text shrinks, so more fits", px(out.get("smaller")) < px(out.get("bigger")), out)
         check("the size is kept on the phone, and comes back after a reload", out.get("kept") and px(out.get("afterReload")) == px(out.get("smaller")), out)
-        check("Satellite lays imagery over the map", out.get("satShown", 0) > 0, out)
+        check("the map opens on the street map; the one button names the view", out.get("label0") == "Map", out.get("label0"))
+        check("one tap: the next ticked view, satellite, and its tiles come", out.get("label1") == "Satellite" and out.get("satShown", 0) > 0, out)
+        check("another tap: back to the map", out.get("label2") == "Map", out.get("label2"))
+        check("Settings: Save settings is at the top", out.get("saveY") is not None and out["saveY"] < 150, out.get("saveY"))
+        check("Settings: Map views is the first section", (out.get("firstHead") or "").strip() == "Map views", out.get("firstHead"))
+        rows = {r["id"]: r for r in out.get("rows") or []}
+        check("every view listed; Map and Satellite ticked; the one shown now marked", set(rows) == {"osm", "esri", "google", "googlesat", "googleterrain", "own"}
+              and rows["osm"]["on"] and rows["esri"]["on"] and rows["osm"]["now"], rows)
+        check("Google's views greyed out with no Google key, never hidden", rows["google"]["off"] and rows["googlesat"]["off"] and rows["googleterrain"]["off"], rows)
+        check("the X leaves Settings, back to where you were", out.get("afterX") == "lines", out.get("afterX"))
+        check("the phone's Back leaves Settings too", out.get("afterBack") == "lines", out.get("afterBack"))
+        check("Save stays in reach when Settings is scrolled", out.get("saveStill") is True, out.get("saveStill"))
+        check("no view ticked: a sentence, nothing saved", "at least one" in (out.get("noneMsg") or ""), out.get("noneMsg"))
+        check("only Satellite ticked: the map shows satellite", out.get("onlySat") == "Satellite", out.get("onlySat"))
     else:
         skipped("the pinch and the tiles in Chromium", "no node or playwright here")
 finally:

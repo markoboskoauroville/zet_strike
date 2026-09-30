@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""zet - ZET Strike V11 terminal: what runs, where to catch it, what the lines are, and the strike news."""
+"""zet - ZET Strike V12 terminal: what runs, where to catch it, what the lines are, and the strike news."""
 import argparse
 import getpass
 import json
@@ -604,7 +604,7 @@ def cmd_day(idx, lines, cfg, args):
     return 0
 
 
-HELP = """zet, ZET Strike V11
+HELP = """zet, ZET Strike V12
 
   zet                 the server: map, near me, lines, news, log and settings in Chrome (O A U R Q)
   zet now             what runs now, with next stops, here in the terminal

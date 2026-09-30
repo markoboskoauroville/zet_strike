@@ -134,6 +134,18 @@ label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem
 .card .row{margin:.5rem 0 0}.card .btn{padding:.3rem .75rem;font-size:.78rem}
 .card label.use{display:inline-flex;align-items:center;gap:.3rem;margin-right:.5rem;font-size:.8rem;color:var(--muted)}
 .card label.use input{accent-color:var(--gold)}
+/* V12: Settings opens with its own bar: Save first, the way out on the right, always in reach */
+.setbar{position:sticky;top:-.8rem;z-index:5;margin:-.8rem -.9rem .4rem;padding:.55rem .9rem;background:var(--bg);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.6rem}
+.setbar .note{margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.x{margin-left:auto;flex:none;width:40px;height:40px;border-radius:50%;background:var(--card);border:1px solid var(--border);
+  color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.vrow{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border:1px solid var(--border);border-radius:.7rem;
+  background:var(--card);margin-bottom:.4rem;cursor:pointer}
+.vrow input{accent-color:var(--gold);width:1.15rem;height:1.15rem;margin:0;flex:none}
+.vrow .vn{font-weight:700;font-size:.9rem}.vrow .vw{color:var(--muted);font-size:.75rem}
+.vrow.now{border-color:rgba(212,160,23,.55)}.vrow .vnow{margin-left:auto;color:var(--gold);font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.vrow.off{opacity:.45;cursor:default}
 #ver{display:block;margin:1.6rem 0 .4rem;color:var(--faint);font-size:.7rem;text-decoration:none}
 #zoomhint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + var(--top) + 10px);transform:translateX(-50%);
   z-index:1100;background:rgba(22,27,34,.94);border:1px solid var(--border);border-radius:16px;padding:5px 14px;
@@ -151,7 +163,7 @@ label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem
   <div class="mapbtns">
     <button class="btn ghost" id="b-me" type="button">Me</button>
     <button class="btn ghost" id="b-parked" type="button">Parked: off</button>
-    <button class="btn ghost" id="b-sat" type="button">Satellite</button>
+    <button class="btn ghost" id="b-view" type="button">Map</button>
   </div>
 </section>
 
@@ -185,6 +197,12 @@ label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem
 </section>
 
 <section class="view" id="v-set">
+  <div class="setbar"><button class="btn" id="b-save" type="button">Save settings</button><span class="note" id="savemsg"></span>
+    <button class="x" id="b-close" type="button" aria-label="Close settings" title="Close"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
+  <h2>Map views</h2>
+  <p class="note">Tick the views the map button steps through. The one shown now is marked.</p>
+  <div id="s-views"></div>
+  <label class="set" for="s-tiles">Your own map server, for "My server", e.g. http://127.0.0.1:PORT/{z}/{x}/{y}.png</label><input type="text" id="s-tiles" autocomplete="off">
   <h2>Keys from a file</h2>
   <p class="note">Pick your key notes, one file or several. Every Gemini key (AQ.) and Google Maps key (AIza) in them is taken, with the name written above it as its title; everything else in the note is left alone.</p>
   <div class="row"><button class="btn" id="b-kfile" type="button">Choose key files&hellip;</button>
@@ -208,13 +226,6 @@ label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem
   <label class="set" for="s-ai">New AI summary every (minutes, 0 = only when I ask)</label><input type="number" id="s-ai">
   <label class="set" for="s-news">Collect headlines every (minutes)</label><input type="number" id="s-news">
   <label class="set" for="s-models">Gemini models, tried in this order</label><input type="text" id="s-models">
-  <h2>Map</h2>
-  <div class="radio" id="s-map" role="radiogroup">
-    <label><input type="radio" name="map" value="osm">OpenStreetMap</label>
-    <label id="l-google"><input type="radio" name="map" value="google">Google</label>
-    <label><input type="radio" name="map" value="own">My own server</label>
-  </div>
-  <label class="set" for="s-tiles">Map tiles address, empty = OpenStreetMap. Your own map server works too, e.g. http://127.0.0.1:PORT/{z}/{x}/{y}.png</label><input type="text" id="s-tiles" autocomplete="off">
   <h2>Data</h2>
   <p class="note">Mobile data. The live feed is asked for only this often; a copy younger than that is used, and ZET is asked "has it changed?" so an unchanged answer costs nothing. The timetable (13 MB) is checked once a day and downloaded only when ZET changes it.</p>
   <div class="card" id="traffic"><b>Used today</b> <span class="tag" id="t-total">0 B</span><div class="apis" id="t-rows"></div><div class="note" id="t-now"></div></div>
@@ -226,8 +237,7 @@ label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem
   <label class="set" for="s-max">Longest walk to a stop (metres)</label><input type="number" step="100" id="s-max">
   <label class="set" for="s-buf">Arrive at the stop this early (minutes)</label><input type="number" id="s-buf">
   <label class="set" for="s-lay">Turnaround at the last stop (minutes)</label><input type="number" id="s-lay">
-  <div class="row" style="margin-top:16px"><button class="btn" id="b-save" type="button">Save settings</button><span class="note" id="savemsg"></span></div>
-  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V11</a>
+  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V12</a>
 </section>
 
 <nav id="tabs">
@@ -258,7 +268,17 @@ async function api(path, body) {
 // ---------------------------------------------------------------- tabs
 let view = "map";
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.dataset.v));
-function show(v) {
+let before = "map";                 // where Settings returns to
+function show(v, fromBack) {
+  if (v === "set" && view !== "set") {
+    before = view;
+    if (!fromBack) try { history.pushState({set: 1}, ""); } catch (e) {}   // the phone's Back leaves Settings
+  }
+  if (v !== "set" && view === "set" && !fromBack && history.state && history.state.set) {
+    history.back();                    // leave the Settings entry too; popstate brings us to v
+    pendingView = v;
+    return;
+  }
   view = v;
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
   document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.id === "v-" + v));
@@ -270,40 +290,54 @@ function show(v) {
   if (v === "set") settings();
 }
 
+let pendingView = null;
+window.addEventListener("popstate", () => {
+  if (view === "set") { const to = pendingView || before; pendingView = null; show(to, true); }
+});
+
 // ---------------------------------------------------------------- map
 const map = L.map("map", {zoomControl: false}).setView([45.8153, 15.978], 13);
 // V11: every tile comes through this app (tiles.py). OpenStreetMap refused the page's own requests
 // ("403 Access blocked", 30.9.2026): the server asks with a User-Agent that names the app, and keeps
 // each tile on the phone, so a street seen once costs nothing again and is there with no signal.
-let TILE = {osm: "", esri: "", google: "", googlesat: ""};
-let tiles = null, sat = null, satOn = false, lastSettings = null;
-try { satOn = localStorage.getItem("zet.sat") === "1"; } catch (e) {}
-function setTiles(url, kind) {
+let TILE = {};
+let tiles = null, lastSettings = null;
+// V12 (Marko, 30.9.2026): one button on the map steps through the views ticked in Settings, Map views.
+const VIEW_NAME = {osm: "Map", esri: "Satellite", google: "Google map", googlesat: "Google satellite", googleterrain: "Terrain", own: "My server"};
+function usable(id, s) {
+  if (id.startsWith("google")) return !!(s && s.google && s.google.has_key);
+  if (id === "own") return !!(s && s.tiles);
+  return true;
+}
+function setView(id, s) {
+  const url = id === "own" ? s.tiles : TILE[id];
   if (!url) return;
+  $("b-view").textContent = VIEW_NAME[id] || id;
   if (tiles && tiles._url === url) return;
   if (tiles) map.removeLayer(tiles);
-  const attr = {osm: "&copy; OpenStreetMap contributors", google: "Map data &copy; Google"}[kind] || "your map server";
-  tiles = L.tileLayer(url, {attribution: attr, maxZoom: kind === "google" ? 22 : 19, className: "base"}).addTo(map);
-  document.getElementById("map").classList.toggle("dark", kind === "osm" || kind === "google");
-}
-// Satellite lies OVER the map, a switch on the map (Marko, 30.9.2026: start with the map, keep the
-// satellite as an overlay). Google's when a Google key draws tiles, Esri's free imagery otherwise.
-function setSat(s) {
-  const g = s && s.google && s.google.has_key && s.google.tiles === "works";
-  const url = g ? TILE.googlesat : TILE.esri;
-  if (sat && (!satOn || sat._url !== url)) { map.removeLayer(sat); sat = null; }
-  if (satOn && !sat && url) sat = L.tileLayer(url, {attribution: g ? "Imagery &copy; Google" : "Imagery &copy; Esri", maxZoom: g ? 22 : 19, className: "sat"}).addTo(map);
-  $("b-sat").classList.toggle("on", satOn);
+  const attr = {osm: "&copy; OpenStreetMap contributors", esri: "Imagery &copy; Esri", own: "your map server"}[id] || "Map data &copy; Google";
+  const zmax = {google: 22, googlesat: 22, googleterrain: 15}[id] || 19;
+  tiles = L.tileLayer(url, {attribution: attr, maxZoom: zmax, className: "base"}).addTo(map);
+  document.getElementById("map").classList.toggle("dark", id === "osm" || id === "google");   // imagery and terrain as they are
 }
 function tilesFrom(s) {
   lastSettings = s;
   if (s.tile_urls) TILE = s.tile_urls;
-  if (s.map === "google" && s.google && s.google.has_key) setTiles(TILE.google, "google");
-  else if (s.map === "own" && s.tiles) setTiles(s.tiles, "own");
-  else setTiles(TILE.osm, "osm");
-  setSat(s);
+  const ok = (s.views || []).filter(id => usable(id, s));
+  const id = ok.includes(s.view) ? s.view : (ok[0] || "osm");
+  setView(id, s);
+  lastSettings.shown = id;
 }
-$("b-sat").onclick = () => { satOn = !satOn; try { localStorage.setItem("zet.sat", satOn ? "1" : "0"); } catch (e) {} setSat(lastSettings); };
+$("b-view").onclick = async () => {
+  const s = lastSettings;
+  if (!s) return;
+  const ok = (s.views || []).filter(id => usable(id, s));
+  if (ok.length < 2) { $("b-view").textContent = VIEW_NAME[s.shown] || "Map"; return; }
+  const next = ok[(ok.indexOf(s.shown) + 1) % ok.length];
+  s.view = next; tilesFrom(s);
+  const r = await api("/api/settings", {view: next});
+  if (!r.error) lastSettings = Object.assign(r, {shown: next});
+};
 api("/api/settings").then(tilesFrom).catch(() => {});
 const markers = {};
 let showParked = false, lastLive = null, me = null, meMarker = null, meCircle = null, pick = null, pickLayer = null;
@@ -535,7 +569,7 @@ async function settings() {
   $("s-lang").value = s.language; $("s-ai").value = s.ai_minutes; $("s-news").value = s.news_minutes;
   $("s-models").value = (s.models || []).join(", "); $("s-walk").value = s.walk_kmh; $("s-max").value = s.max_walk_m;
   $("s-buf").value = s.buffer_min; $("s-lay").value = s.layover_min; $("s-tiles").value = s.tiles || "";
-  document.querySelectorAll("#s-map input").forEach(r => r.checked = r.value === s.map);
+  renderViews(s);
   $("ver").textContent = "V" + s.version;
   $("s-poll").value = s.poll_seconds; $("s-idle").value = s.idle_minutes; $("s-night").value = s.night_minutes;
   traffic();
@@ -544,6 +578,14 @@ async function settings() {
 }
 const STATE_WORD = {works: "works", valid: "valid", "no credit": "no credit", rejected: "rejected", throttled: "throttled", unclear: "unclear",
                     "not enabled": "not enabled", restricted: "restricted", "new": "not tested"};
+function renderViews(s) {
+  $("s-views").innerHTML = (s.views_all || []).map(v => {
+    const can = usable(v.id, s), on = (s.views || []).includes(v.id), now = lastSettings && lastSettings.shown === v.id;
+    const why = !can ? (v.needs === "google" ? " (needs a Google Maps key)" : " (needs your server's address)") : "";
+    return "<label class='vrow" + (can ? "" : " off") + (now ? " now" : "") + "'><input type='checkbox' value='" + esc(v.id) + "'" + (on ? " checked" : "") + (can ? "" : " disabled") + ">" +
+      "<span><span class='vn'>" + esc(v.name) + "</span><br><span class='vw'>" + esc(v.what + why) + "</span></span>" + (now ? "<span class='vnow'>shown now</span>" : "") + "</label>";
+  }).join("");
+}
 const SRC = {feed: "live feed", timetable: "timetable", news: "news feeds", tiles: "map tiles"};
 async function traffic() {
   const t = await api("/api/traffic");
@@ -562,8 +604,6 @@ function renderGoogle(g) {
   $("gsrc").textContent = has ? "from " + g.source + (g.t ? ", tested " + new Date(g.t * 1000).toLocaleString("hr-HR", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : ", not tested yet") : "Paste a key above, or keep it in the Keyring app.";
   $("gapis").innerHTML = has && g.apis ? g.apis.map(a => "<b>" + esc(a.api) + "</b> " + esc(STATE_WORD[a.state] || a.state)).join(" &middot; ") : "";
   $("b-gtest").disabled = !has; $("b-gdel").disabled = !has || g.source !== "this phone";
-  $("l-google").classList.toggle("off", !has);
-  $("l-google").querySelector("input").disabled = !has;
   const keys = (g && g.keys) || [];
   $("gkeys").innerHTML = keys.length > 0 ? "<h3>Saved Google keys</h3>" + keys.map(k => "<div class='card'><label class='use'><input type='radio' name='guse' value='" + esc(k.fp) + "'" + (k.active ? " checked" : "") + ">in use</label>" +
     title(k) + "<span class='kfp'>" + esc(k.fp) + "</span> <span class='tag " + esc(String(k.tiles || k.state || "new").replace(" ", "")) + "'>map " + esc(STATE_WORD[k.tiles || k.state] || k.tiles || k.state) + "</span>" +
@@ -638,11 +678,12 @@ $("b-gdel").onclick = async () => {
   if (!confirm("Delete the Google Maps key from this phone?")) return;
   await api("/api/google/delete", {}); $("gmsg").textContent = "Deleted."; settings();
 };
+$("b-close").onclick = () => show(before);
 $("b-save").onclick = async () => {
   const r = await api("/api/settings", {language: $("s-lang").value, ai_minutes: $("s-ai").value, news_minutes: $("s-news").value,
-    map: (document.querySelector("#s-map input:checked") || {}).value, poll_seconds: $("s-poll").value, idle_minutes: $("s-idle").value, night_minutes: $("s-night").value, models: $("s-models").value, walk_kmh: $("s-walk").value, max_walk_m: $("s-max").value, buffer_min: $("s-buf").value, layover_min: $("s-lay").value, tiles: $("s-tiles").value.trim()});
+    views: [...document.querySelectorAll("#s-views input:checked")].map(i => i.value), poll_seconds: $("s-poll").value, idle_minutes: $("s-idle").value, night_minutes: $("s-night").value, models: $("s-models").value, walk_kmh: $("s-walk").value, max_walk_m: $("s-max").value, buffer_min: $("s-buf").value, layover_min: $("s-lay").value, tiles: $("s-tiles").value.trim()});
   $("savemsg").textContent = r.error ? r.error : "Saved.";
-  if (!r.error) { settings(); tilesFrom(r); }
+  if (!r.error) { tilesFrom(r); settings(); }
   setTimeout(() => $("savemsg").textContent = "", 3000);
 };
 

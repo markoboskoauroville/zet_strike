@@ -272,10 +272,14 @@ def test(fp=None):
 
 # ---------------------------------------------------------------- the tiles
 _sat_session = {"token": None, "expiry": 0, "fp": None}     # V11: satellite has a session of its own
+_terrain_session = {"token": None, "expiry": 0, "fp": None}  # V12: and terrain
 
 
 def _new_session(key, map_type="roadmap"):
-    body = json.dumps({"mapType": map_type, "language": "hr-HR", "region": "HR"}).encode()
+    req = {"mapType": map_type, "language": "hr-HR", "region": "HR"}
+    if map_type == "terrain":
+        req["layerTypes"] = ["layerRoadmap"]         # Google's terrain comes only with the roads over it
+    body = json.dumps(req).encode()
     code, data, _h = probes.http("POST", "%s/v1/createSession?key=%s" % (TILE_BASE, urllib.parse.quote(key)),
                                  {"Content-Type": "application/json"}, body)
     j = probes.jbody(data) or {}
@@ -296,7 +300,7 @@ def tile(z, x, y, map_type="roadmap"):
     if not key:
         return 404, b"", "text/plain"
     fp = fingerprint(key)
-    sess = _sat_session if map_type == "satellite" else _session
+    sess = {"satellite": _sat_session, "terrain": _terrain_session}.get(map_type, _session)
     for attempt in (0, 1):
         with _lock:
             fresh = sess["token"] and sess["fp"] == fp and sess["expiry"] - time.time() > 600

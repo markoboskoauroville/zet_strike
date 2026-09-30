@@ -1,23 +1,23 @@
 {
-  "version": 11,
-  "notes": "V11: the Day Commute look (its palette, pills, compact rows, the clock in the top bar); pinch to size the text, kept on the phone; map tiles through the app (OpenStreetMap refused the page: 403 Access blocked), kept on the phone 30 days; Satellite as a switch over the map (Google with a working key, Esri otherwise). V10: keys from files.",
+  "version": 12,
+  "notes": "V12: Settings has Save at the top and an X (and the phone's Back) to leave; Map views first: every way the map can look, ticked ones stepped through by one button on the map. V11: the Day Commute look, pinch for text, tiles through the app.",
   "files": {
-    "app.py": "820c880fb0a953384b3ffa8c361370b59a5ed06cd7985ac89c22a625e9a64882",
+    "app.py": "f394f14d7e0dcaf9c247dba084e613675e45cfe6ea4fa477c37f10b98460eb14",
     "console.py": "095421a3ae8f495674b13daf04163e36e3876e8c8804f4cfa57215ec359b0363",
-    "core.py": "647cff41c834032086db80b91ba37cf923496bf1a663faea3f4e26dbbd8c5620",
-    "index.html": "bc079e077029975151862790a3bd7ffba78b3be79652c27c1c890bbfda8195d7",
+    "core.py": "85f8adfde023025483cff7dbb7e88478092f38fc4241b54d0b431855e502486e",
+    "index.html": "85c5f9fedc8d288b1a8c07600bd6ac335f6a43d464f1f9e24576e69de2392be5",
     "keyparse.py": "583ff5c0fe93923369be3213c8591a63ffea58b43fafbac9ad466f95f2f394de",
     "labels.py": "a7707a18f26c0acc7ba8139df70ffe234686eaecf17e664b5608732fd56cc7b7",
     "localguard.py": "d681a09cecbd2b3dce0bcd016983e2473b513d70909b21c3c018ab081f6bb6fa",
-    "mapkey.py": "e2cf49f801c4497e7f35c242815f6f87ff800cc43be1e527d9066c25e2a453c8",
+    "mapkey.py": "9b0086e1f37ac6fc617b0a85f75cd5a55e9d297ebd66f8e362e63b8ccf2a4ff8",
     "net.py": "76b7158e2531154f6d9ecf7c5f2627d6024412059c4a0941812b1591bf7b6233",
     "news.py": "194f16e350fb51b5da6caf1790b06c78eebe08e9aea5f5efe667c0ce5d4ae096",
     "portpick.py": "bff780b5519fd21bb7e2405f0900f84407c00c7f2cf153ef0927acc522891625",
     "probes.py": "d06712fa44fc1fb7199870274f2745e19e5b841d23015b2b50204f38abce6bc2",
-    "tiles.py": "2df9decf30a74aadfa983513a563c7a2877ce1ccb394629015fb1b378c5bb7a9",
+    "tiles.py": "b8f789f82019bdb5d9aae7862b0291b381f6fb2af2b532b13051c2ee3f01b7f5",
     "update.py": "3ff51ffa42e9fd382fe1bcddd00872978470e13c874d875ddcd31ccee5e9eb0e",
     "vendor.py": "63f7455dcadb17ab09c4426759002bc85a01d85500b88cc714956b742e0b8a86",
-    "zet.py": "be5972088d3714e31aa8b0e8b275de1475a14439d047e8eadb914821910130a6",
+    "zet.py": "dbe4043012d1473df743261564a4097773c051ca219b61b0000c67c948f83b63",
     "zs.py": "870d0bfbefb7a4e9aaa41863fd2fb5618c344ce32e094aba391196bdc8fa4fb7"
   }
 }

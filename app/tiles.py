@@ -34,7 +34,7 @@ SOURCES = {
     "esri": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 }
 URL_BASE = {k: os.environ.get("ZET_TILE_%s" % k.upper(), v) for k, v in SOURCES.items()}   # tests point these home
-MAX_ZOOM = {"osm": 19, "esri": 19, "google": 22, "googlesat": 22}
+MAX_ZOOM = {"osm": 19, "esri": 19, "google": 22, "googlesat": 22, "googleterrain": 15}
 _busy = threading.Semaphore(4)     # OSM's policy: no more than a couple of connections; the page asks many at once
 
 
@@ -57,9 +57,9 @@ def get(src, z, x, y):
         age = None
     import net
     with _busy:
-        if src in ("google", "googlesat"):
+        if src.startswith("google"):
             import mapkey
-            code, data, ctype2 = mapkey.tile(z, x, y, "satellite" if src == "googlesat" else "roadmap")
+            code, data, ctype2 = mapkey.tile(z, x, y, {"googlesat": "satellite", "googleterrain": "terrain"}.get(src, "roadmap"))
         else:
             url = URL_BASE[src].format(z=z, x=x, y=y)
             try:

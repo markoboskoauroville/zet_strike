@@ -1,6 +1,6 @@
 # ZET Strike: handover
 
-    version      V11 (30.9.2026)
+    version      V12 (30.9.2026)
     repository   markoboskoauroville/zet_strike (public)
     command      zet (the server; zet map is the same), zet now (the board in the terminal)
     port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
@@ -17,6 +17,25 @@
 
 Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
 (the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## V12 (30.9.2026): Settings you can leave, map views on one button
+
+Marko, 30.9.2026: *"save settings should be at the top, and settings doesn't have X to exit the
+settings. I'm stuck in settings, and the map view should be the first thing in the settings at the
+top ... The map view should be toggled in the main screen. One button for every view. and which
+view are toggling, there is a check mark in the settings."*
+
+- **Settings opens with its own bar**: Save settings on the left, an X on the right, and the bar stays
+  at the top when Settings scrolls. The X goes back to the page Settings was opened from; so does the
+  phone's Back button (Settings pushes a history entry).
+- **Map views is the first section**: every way the map can look, Map (OpenStreetMap, dark),
+  Satellite (Esri), Google map, Google satellite, Google terrain (new: a Map Tiles session of type
+  terrain), My server. A tick puts a view in the round; the one shown now is marked. Views that
+  need a Google key or a server address stay listed, greyed out, with what they need.
+- **One button on the map** (where Satellite was) names the view shown and steps to the next ticked
+  one; the choice is saved on the server. Satellite is now a view of its own, not an overlay.
+- V11's single map choice becomes the views (`app.views_of`): Google gives Google map + Google
+  satellite, your own server gives it + Satellite, anything else Map + Satellite.
 
 ## V11 (30.9.2026): the Day Commute look, pinch for text, the map fixed
 
