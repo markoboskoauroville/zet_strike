@@ -28,7 +28,7 @@ try:
     check("the banner comes up", con.wait_for(r"\[Q\] stop", 20), con.text()[-600:])
     t = con.text()
     check("MA READER's shape: name, where, library, version", all(s in t for s in (
-        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V7")), t[-600:])
+        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V8")), t[-600:])
     check("the five keys, one per line", all(s in t for s in (
         "[O] open in Chrome", "[A] open in the default browser", "[U] update the app", "[R] restart", "[Q] stop")))
     check("plain lines, never a box", not any(ch in t for ch in "┌┐└┘│"))
@@ -48,7 +48,7 @@ try:
     check("no vehicle and the feed unreachable: the API still answers, with the reason", st == 200 and live.get("vehicles") == [] and "feed" in (live.get("error") or ""), live)
     st, body, _ = http(base + "/api/settings", headers=H)
     s = json.loads(body or b"{}")
-    check("settings answer: the port bound, V7, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 7
+    check("settings answer: the port bound, V8, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 8
           and s["google"]["has_key"] and s["google"]["source"] == "environment" and key not in body.decode())
 
     st, img, hdr = http(base + s["google_tiles"].replace("{z}", "3").replace("{x}", "4").replace("{y}", "2"))
@@ -90,7 +90,7 @@ try:
         check("in Chromium at 390 px: no script error, nothing wider than the phone", not out.get("errs") and out.get("width") == 390, out)
         check("the settings show the Google key by fingerprint, Test live, Google choosable", out.get("gfp") == s["google"]["fp"]
               and out.get("gtest") is False and out.get("google") is False, out)
-        check("the version sits at the foot of settings", out.get("ver") == "V7")
+        check("the version sits at the foot of settings", out.get("ver") == "V8")
     else:
         skipped("the page in Chromium", "no node or playwright here")
 
@@ -101,5 +101,27 @@ try:
 finally:
     con.kill()
     tiles.stop()
+
+# the one word: `zet` alone is the server (Marko, 30.9.2026); `zet now` is the board
+port2 = free_port()
+con = Console(console_env({"PATH": bindir + os.pathsep + os.environ["PATH"], "ZET_PORT": str(port2), "ZET_NO_BROWSER": "1"}), script="zet.py")
+try:
+    check("`zet` with nothing after it starts the server, with its console", con.wait_for(r"\[Q\] stop", 20)
+          and ("on this phone  http://127.0.0.1:%d" % port2) in con.text(), con.text()[-400:])
+    check("and it serves the page", http("http://127.0.0.1:%d/health" % port2)[0] == 200)
+    con.key("q")
+    con.done(8)
+finally:
+    con.kill()
+con = Console(console_env({"NO_COLOR": "1"}), script="zet.py", args=["now", "-q"])
+try:
+    code = con.done(40)
+    t = con.text()
+    # with the feed and timetable unreachable here the board ends early saying so (V6's behaviour); what
+    # this checks is that `zet now` takes the board's road and ends, and never starts the server
+    check("`zet now` is the board in the terminal, not the server", code is not None and "[Q] stop" not in t
+          and "ZET STRIKE  server" not in t and ("running now" in t or "timetable" in t), (code, t[-400:]))
+finally:
+    con.kill()
 
 finish("test 2, the real thing")

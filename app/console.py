@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""console.py - ZET Strike V7: the terminal side of `zet map`, the server.
+"""console.py - ZET Strike V8: the terminal side of `zet`, the server.
 
 The look is MA READER's server console (Marko's screenshot, 30.9.2026): the name, a dashed rule,
 where the page is and where the data lives, a dashed rule, one key per line, a dashed rule.

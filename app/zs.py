@@ -10,5 +10,5 @@ try:
     update.migrate()
 except Exception:
     pass
-print("This app is now called zet. Use: zet   (zet map for the map)")
+print("This app is now called zet. Use: zet   (zet now for the board)")
 os.execv(sys.executable, [sys.executable, os.path.join(HERE, "zet.py")] + sys.argv[1:])

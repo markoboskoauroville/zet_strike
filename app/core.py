@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""core.py - ZET Strike V7 engine: live feed, timetable, line catalog, trip planner, event log."""
+"""core.py - ZET Strike V8 engine: live feed, timetable, line catalog, trip planner, event log."""
 import csv
 import hashlib
 import io
@@ -31,8 +31,8 @@ EVENTS_FILE = os.path.join(APP_DIR, "events.jsonl")
 FLEET_FILE = os.path.join(APP_DIR, "fleet.json")
 FEED_URL = os.environ.get("ZET_FEED_URL", "https://www.zet.hr/gtfs-rt-protobuf")
 STATIC_URL = os.environ.get("ZET_STATIC_URL", "https://www.zet.hr/gtfs-scheduled/latest")
-UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/7"
-VERSION = 7
+UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/8"
+VERSION = 8
 SCHEMA = 6          # bump when index.json / lines.json layout changes
 ROUTE_TRAM = 0
 PARK_M = 400        # further than this from its own route = parked, not in service

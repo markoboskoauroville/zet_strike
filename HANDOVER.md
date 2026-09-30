@@ -1,8 +1,8 @@
 # ZET Strike: handover
 
-    version      V7 (30.9.2026)
+    version      V8 (30.9.2026)
     repository   markoboskoauroville/zet_strike (public)
-    command      zet, and zet map for the server
+    command      zet (the server; zet map is the same), zet now (the board in the terminal)
     port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
     data         ~/.zet-strike   keys in ~/.zet-strike/secrets (0600)
 
@@ -17,6 +17,13 @@
 
 Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
 (the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## V8 (30.9.2026): `zet` alone is the server
+
+Marko, 30.9.2026, typing `zet` and getting the board: *"Where is my Flask server and everything?
+That should be the command which runs server."* The one word runs the app (`termux-app.md` §4), so
+`zet` starts the server, `zet map` stays as a second name for it, and the terminal board is `zet now`.
+Flags alone (`zet -a`) and line numbers alone (`zet 228`) still mean the board.
 
 ## What V7 is
 

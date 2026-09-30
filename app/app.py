@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""app.py - ZET Strike V7 in Chrome (zet map): live map, near me, lines, news desk, event log, settings.
+"""app.py - ZET Strike V8 in Chrome (zet, the server): live map, near me, lines, news desk, event log, settings.
 
 A monitor thread polls the ZET feed every 20 s, writes what changed into the event log, collects headlines
 every few minutes and asks Gemini for a fresh summary when something new happened. Pages only read memory.
@@ -438,7 +438,7 @@ def main():
     port, note = portpick.pick("127.0.0.1", wanted)
     LIVE_PORT = port
     portpick.announce("zet", port)
-    core.log_event("system", "zet map started on port %d" % port)
+    core.log_event("system", "server started on port %d" % port)
     threading.Thread(target=monitor, daemon=True).start()
     library = core.APP_DIR.replace(os.path.expanduser("~"), "~", 1)
     try:

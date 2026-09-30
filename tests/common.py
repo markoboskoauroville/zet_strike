@@ -124,11 +124,11 @@ def read_lines(path):
 class Console:
     """app.py on a real pty, through its real entry point, so the console sees a terminal."""
 
-    def __init__(self, env, folder=APP):
+    def __init__(self, env, folder=APP, script="app.py", args=()):
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
             os.chdir(folder)
-            os.execvpe(PY, [PY, os.path.join(folder, "app.py")], env)
+            os.execvpe(PY, [PY, os.path.join(folder, script)] + list(args), env)
         self.buf = b""
 
     def read(self, seconds):

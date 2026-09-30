@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""zet - ZET Strike V7 terminal: what runs, where to catch it, what the lines are, and the strike news."""
+"""zet - ZET Strike V8 terminal: what runs, where to catch it, what the lines are, and the strike news."""
 import argparse
 import getpass
 import json
@@ -186,7 +186,7 @@ def render_board(cfg, feed, vs, args, footer_events=0):
         render_vehicle(f, v, args.next, args.full, core.secs_of_day(core.now_zagreb()))
     f.sep()
     if hidden_parked:
-        f.row((" +%d parked vehicles hidden, show: zet -a" % hidden_parked, DIM))
+        f.row((" +%d parked vehicles hidden, show: zet now -a" % hidden_parked, DIM))
     if footer_events:
         evs = core.read_events(footer_events, kinds={"fleet", "lines", "news", "ai"})
         if evs:
@@ -454,7 +454,7 @@ def cmd_log(idx, lines, cfg, args):
     day = None
     if not evs:
         f.sep()
-        f.row((" Nothing logged yet. Run zet, zet watch or zet map.", T))
+        f.row((" Nothing logged yet. Run zet now, zet watch or zet.", T))
     for e in evs:
         dt = core.from_epoch(e["t"])
         if dt.strftime("%d.%m") != day:
@@ -562,7 +562,7 @@ def cmd_day(idx, lines, cfg, args):
     items = sorted(((rs[0]["t"], k, rs) for k, rs in groups.items() if args.all or any(x["s"] != "PARKED" for x in rs)),
                    key=lambda x: x[0])
     if not items:
-        f.row((" Nothing logged yet. Run zet or zet watch first.", T))
+        f.row((" Nothing logged yet. Run zet now or zet watch first.", T))
     for first, (key, trip), rs in items:
         moved = any(x["s"] == "MOVING" for x in rs)
         a = core.nearest_stop(idx, rs[0]["lat"], rs[0]["lon"]) if idx else "?"
@@ -577,10 +577,11 @@ def cmd_day(idx, lines, cfg, args):
     return 0
 
 
-HELP = """zet, ZET Strike V7
+HELP = """zet, ZET Strike V8
 
-  zet                 what runs now, with next stops
-  zet 17 228          only these lines
+  zet                 the server: map, near me, lines, news, log and settings in Chrome (O A U R Q)
+  zet now             what runs now, with next stops, here in the terminal
+  zet now 17 228      only these lines
   zet near            where and when to catch something (phone GPS)
   zet near Vodnikova  same, from a stop you name
   zet lines           the lines in the feed: from, to, stops, hours
@@ -595,12 +596,18 @@ HELP = """zet, ZET Strike V7
   zet update          newest version from GitHub, then the timetable
   zet update check    only look, change nothing
   options: -q skip movement check, -a show parked, -n 10 more stops
-  map, near me, news and log in Chrome: zet map
+  zet map is the same as zet (the server)
 Output of the last run: ~/.zet-strike/chain.txt"""
 
 
+SERVER_WORDS = ("map", "server", "serve", "s")
+BOARD_WORDS = ("now", "board", "b")
+
+
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "map":
+    # One word runs the app (MANTRA_MANIFEST termux-app.md §4): `zet` alone is the server, as
+    # `zet map` was in V7. The terminal board is `zet now`; flags alone (zet -a) still mean the board.
+    if len(sys.argv) == 1 or sys.argv[1] in SERVER_WORDS:
         here = os.path.dirname(os.path.abspath(__file__))
         os.execv(sys.executable, [sys.executable, os.path.join(here, "app.py")] + sys.argv[2:])
     try:
@@ -625,7 +632,9 @@ def main():
             "line": cmd_lines, "l": cmd_lines, "news": cmd_news, "log": cmd_log, "keys": cmd_keys,
             "key": cmd_keys, "day": cmd_day, "d": cmd_day, "update": None, "u": None}
     mode, args.lines, args.rest = "board", [], []
-    if args.words and args.words[0] in cmds:
+    if args.words and args.words[0] in BOARD_WORDS:
+        args.lines = args.words[1:]
+    elif args.words and args.words[0] in cmds:
         mode, args.rest = args.words[0], args.words[1:]
     else:
         args.lines = args.words
@@ -665,7 +674,7 @@ def cmd_update(rest):
             print(OK + "  " + res["message"] + R)
             if res.get("changed"):
                 print("  previous version kept in %s" % res["backup"].replace(os.path.expanduser("~"), "~"))
-                print("  if zet map is running, stop it with Ctrl-C and start it again")
+                print("  if the server (zet) is running, press R in it to restart")
         except Exception as e:
             print(WARN + "  update failed, nothing was changed: %s" % e + R)
             code = 1

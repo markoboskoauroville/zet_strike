@@ -1,11 +1,11 @@
 {
-  "version": 7,
-  "notes": "V7: zet map is a proper server (waitress, its own port 8100 that never fails to open, the MA READER console O A U R Q, the localhost guard). Google Maps key in Settings with a real test, the Google map through the app. Gemini keys tested with one real token. The map library kept on the phone. The page works with no vehicle and no feed.",
+  "version": 8,
+  "notes": "V8: zet alone is the server (zet map still works); the board in the terminal is zet now. V7: the proper server (waitress, port 8100, the MA READER console O A U R Q, the localhost guard), Google Maps key with a real test and the Google map through the app, Gemini keys tested with one real token, the map library kept on the phone, the page whole with no vehicles.",
   "files": {
-    "app.py": "9732ba1e02d76e6b81fb00b7e0ea02cb108901dc13f099639d37f18a8f0df452",
-    "console.py": "10b96998336ce851f09862cf583884b285bc014e8871fbd5e5edd95c286f42f1",
-    "core.py": "c9ddf65a4eb860f370836f2c7109d454198cea748bc796b786bdc3d145523245",
-    "index.html": "fa9bc3b4a591199d35802c402dc93dcceb1241bdd88128e9aeb696e30fd3023a",
+    "app.py": "00ad0760e3bf4521dfa42c505120c5997b16522483db51bcb1ade50ff0c9011d",
+    "console.py": "095421a3ae8f495674b13daf04163e36e3876e8c8804f4cfa57215ec359b0363",
+    "core.py": "296c63ab4bdf22ada789720183574feca34733292e1c51e2b4218a4bf7412981",
+    "index.html": "5536ddbcd4b25a5e834a5e6f28447e22ac2a2e923b1fc96e26822738b312f22e",
     "localguard.py": "d681a09cecbd2b3dce0bcd016983e2473b513d70909b21c3c018ab081f6bb6fa",
     "mapkey.py": "db2a5567d1ac43b4a8bd659b8bdf4f8bef8f4b1972bba92b4f8244ee183d091d",
     "news.py": "44a8e6d61cf538e60570bb2628643076a03aa75d1f200c186a26d2b2b585586a",
@@ -13,7 +13,7 @@
     "probes.py": "d06712fa44fc1fb7199870274f2745e19e5b841d23015b2b50204f38abce6bc2",
     "update.py": "3ff51ffa42e9fd382fe1bcddd00872978470e13c874d875ddcd31ccee5e9eb0e",
     "vendor.py": "63f7455dcadb17ab09c4426759002bc85a01d85500b88cc714956b742e0b8a86",
-    "zet.py": "9279a760205365ffe3433cf398587ed75df153c50193937021580de9ecf9227b",
-    "zs.py": "47f3cebf5cd2c2ae4df038f7faaaf1c2a5e6680b7ba78764c93872596d72f0ea"
+    "zet.py": "f9d68c3e67efaaf3caea2d2905201d19e530e9d1915961c951eb46147fcab34f",
+    "zs.py": "870d0bfbefb7a4e9aaa41863fd2fb5618c344ce32e094aba391196bdc8fa4fb7"
   }
 }

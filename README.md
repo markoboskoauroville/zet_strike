@@ -17,7 +17,8 @@ For GPS in `zet near`, also install the Termux:API app from F-Droid.
 
 ## Commands
 
-    zet                  what runs now, with next stops
+    zet                  the server: map, near me, lines, news, log, settings in Chrome
+    zet now              what runs now, with next stops, in the terminal
     zet near             where and when to catch the next tram or bus
     zet lines            lines in service: names, terminals
     zet line 228         one line with all its stops
@@ -28,7 +29,7 @@ For GPS in `zet near`, also install the Termux:API app from F-Droid.
     zet update           newest version from this repo, then the timetable
     zet update check     only look, change nothing
     zet keys google      the Google Maps key: paste, test, del
-    zet map              the server: the page in Chrome, O A U R Q
+    zet map              the same as zet
 
 ## How updating works
 
@@ -48,13 +49,13 @@ timetable. News: public RSS feeds of Croatian outlets. Gemini keys stay on
 the phone in `~/.zet-strike/secrets/` with closed permissions and are never
 printed.
 
-## The server (`zet map`)
+## The server (`zet`)
 
     ZET STRIKE  server
     ----------------------------------------
      on this phone  http://127.0.0.1:8100
      library        ~/.zet-strike
-     version        V7
+     version        V8
     ----------------------------------------
      [O] open in Chrome
      [A] open in the default browser
