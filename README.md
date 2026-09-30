@@ -21,7 +21,7 @@ For GPS in `zet near`, also install the Termux:API app from F-Droid.
     zet watch            live view
     zet update           newest version from this repo, then the timetable
     zet update check     only look, change nothing
-    zet map                the same as a map page in Chrome
+    zet map              the same as a map page in Chrome
 
 ## How updating works
 

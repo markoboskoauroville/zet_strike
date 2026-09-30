@@ -57,9 +57,7 @@ def check():
     ref = latest_commit()
     m = remote_manifest(ref)
     have = installed()
-    same = have.get("commit") == ref and ref != BRANCH
-    if ref == BRANCH:
-        same = have.get("files") == m["files"]
+    same = have.get("files") == m["files"]
     return {"current": have.get("version", "?"), "current_commit": (have.get("commit") or "")[:7],
             "latest": m.get("version", "?"), "latest_commit": ref[:7] if ref != BRANCH else "main",
             "up_to_date": same, "ref": ref, "manifest": m, "notes": m.get("notes", "")}
