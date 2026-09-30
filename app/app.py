@@ -1,23 +1,33 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""app.py - ZET Strike V6 in Chrome (zet map): live map, near me, lines, news desk, event log, settings.
+"""app.py - ZET Strike V7 in Chrome (zet map): live map, near me, lines, news desk, event log, settings.
 
 A monitor thread polls the ZET feed every 20 s, writes what changed into the event log, collects headlines
 every few minutes and asks Gemini for a fresh summary when something new happened. Pages only read memory.
+
+The server is the Termux app shape of MANTRA_MANIFEST (termux-app.md): waitress on 127.0.0.1 (it holds
+keys), a port that never fails to open (portpick.py, 8100 then the next fifteen then any), the three
+localguard checks on every /api/ call, the page opened in Chrome only once the port answers, and the
+console of console.py (O A U R Q). The page is whole from the first frame even when no vehicle is in
+the feed and even when the feed cannot be reached: the map, near me, lines, news and settings all work.
 """
 import logging
 import os
 import re
-import socket
-import subprocess
 import sys
 import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import secrets as pysecrets
+
 import core
+import localguard
+import mapkey
 import news
-from flask import Flask, jsonify, request, send_file
+import portpick
+import vendor
+from flask import Flask, Response, jsonify, request, send_file
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 app = Flask(__name__)
@@ -29,6 +39,8 @@ STATE = {}
 JOBS = {"news": False, "ai": False, "last_error": None}
 STATIC = {"idx": None, "lines": None}
 POLL = int(os.environ.get("ZET_POLL", "20"))
+LIVE_PORT = int(os.environ.get("ZET_PORT") or 0) or 8100    # the port actually bound; set in main before serving
+TILE_TOKEN = pysecrets.token_urlsafe(12)   # in the Google tile address only the page can read (/api/settings)
 
 
 # ---------------------------------------------------------------- background work
@@ -139,10 +151,70 @@ def snapshot_copy():
         return dict(LIVE), list(LIVE["vehicles"])
 
 
+# ---------------------------------------------------------------- the guard
+@app.before_request
+def _guard():
+    """Host must be loopback, a present Origin/Referer must be this page, and every /api/ call must
+    carry the X-ZET header a foreign page cannot set (localguard.py, from KEYRING_TERMUX)."""
+    return localguard.check(LIVE_PORT)
+
+
+@app.after_request
+def _headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    if request.path.startswith("/api/") or request.path == "/":
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 # ---------------------------------------------------------------- pages and API
+FAVICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+           '<rect width="64" height="64" rx="14" fill="#0d0c0a"/>'
+           '<rect x="14" y="12" width="36" height="34" rx="8" fill="none" stroke="#ffaf00" stroke-width="5"/>'
+           '<path d="M14 30h36" stroke="#ffaf00" stroke-width="5"/>'
+           '<circle cx="23" cy="38" r="3" fill="#ffaf00"/><circle cx="41" cy="38" r="3" fill="#ffaf00"/>'
+           '<path d="M22 46l-6 8M42 46l6 8" stroke="#ffaf00" stroke-width="5" stroke-linecap="round"/></svg>')
+
+
 @app.route("/")
 def index():
     return send_file(os.path.join(HERE, "index.html"))
+
+
+@app.route("/favicon.svg")
+def favicon():
+    return Response(FAVICON, mimetype="image/svg+xml", headers={"Cache-Control": "max-age=86400"})
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    return favicon()
+
+
+@app.route("/health")
+def health():
+    return jsonify({"ok": True, "app": "zet", "version": core.VERSION, "port": LIVE_PORT})
+
+
+@app.route("/vendor/<name>")
+def vendor_file(name):
+    """Leaflet, fetched once, checked by SHA-256, served from the phone after that (vendor.py)."""
+    data = vendor.get(name)
+    if data is None:
+        return Response(b"", status=404)
+    return Response(data, mimetype=vendor.TYPES[name], headers={"Cache-Control": "max-age=604800"})
+
+
+@app.route("/tile/google/<int:z>/<int:x>/<int:y>")
+def tile(z, x, y):
+    """Google map tiles through this server, so the key never reaches the page (mapkey.py)."""
+    if request.args.get("t") != TILE_TOKEN or not (0 <= z <= 22 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
+        return Response(b"", status=404)
+    code, data, ctype = mapkey.tile(z, x, y)
+    if code != 200:
+        return Response(data, status=code, mimetype="text/plain")
+    return Response(data, mimetype=ctype, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.route("/api/live")
@@ -277,6 +349,8 @@ def api_settings():
             ms = [m.strip() for m in ms if m and m.strip() and len(m.strip()) < 60][:8]
             if ms:
                 cfg["models"] = ms
+        if data.get("map") in ("osm", "google", "own"):
+            cfg["map"] = data["map"]
         if "tiles" in data:
             t = str(data["tiles"] or "").strip()
             if not t:
@@ -287,7 +361,12 @@ def api_settings():
                 return jsonify({"error": "The tiles address must start with http and contain {z}, {x} and {y}"}), 400
         core.save_config(cfg)
     out = {k: cfg.get(k) for k in list(SETTABLE) + ["language", "models", "tiles"]}
+    out["map"] = cfg.get("map") or ("own" if cfg.get("tiles") else "osm")
     out["ring"] = news.ring_status()
+    out["google"] = mapkey.status()
+    out["google_tiles"] = "/tile/google/{z}/{x}/{y}?t=" + TILE_TOKEN
+    out["version"] = core.VERSION
+    out["port"] = LIVE_PORT
     return jsonify(out)
 
 
@@ -312,6 +391,34 @@ def api_keys_delete():
     return jsonify({"deleted": news.remove_key(str((request.get_json(silent=True) or {}).get("fp", "")))})
 
 
+@app.route("/api/google")
+def api_google():
+    return jsonify(mapkey.status())
+
+
+@app.route("/api/google/save", methods=["POST"])
+def api_google_save():
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    r = mapkey.save(str((request.get_json(silent=True) or {}).get("text", "")))
+    return jsonify(r), (400 if r.get("error") else 200)
+
+
+@app.route("/api/google/test", methods=["POST"])
+def api_google_test():
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    r = mapkey.test()
+    return jsonify(r), (400 if r.get("error") else 200)
+
+
+@app.route("/api/google/delete", methods=["POST"])
+def api_google_delete():
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify({"deleted": mapkey.delete()})
+
+
 @app.route("/stream")
 def stream():
     """V4/V5 compatible raw list."""
@@ -320,39 +427,34 @@ def stream():
 
 
 # ---------------------------------------------------------------- start
-def find_available_port(start_port=8080):
-    port = start_port
-    while port < start_port + 50:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", port)) != 0:
-                return port
-        port += 1
-    raise RuntimeError("no free port between %d and %d" % (start_port, port))
-
-
-def open_in_chrome(url):
-    """Rule 45: verify Chrome exists, launch it, fall back to termux-open-url, else print the address."""
-    if os.environ.get("ZET_NO_BROWSER"):
-        return
-    have = subprocess.run("pm list packages 2>/dev/null | grep -q com.android.chrome", shell=True).returncode == 0
-    if have:
-        print("\033[38;5;220mLaunching Google Chrome at %s\033[0m" % url)
-        cmd = 'am start -n com.android.chrome/com.google.android.apps.chrome.Main -a android.intent.action.VIEW -d "%s"' % url
-        if subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-            return
-    if subprocess.run("command -v termux-open-url >/dev/null 2>&1", shell=True).returncode == 0:
-        subprocess.run(["termux-open-url", url])
-        return
-    print("\033[1;31m[!] Could not open Chrome automatically.\033[0m")
-    print("Open this address by hand: %s\n" % url)
+def main():
+    """Pick the port, announce it, serve through the console. U and R restart this same process on the
+    same port (os.execv keeps the pid), so the page that is open keeps answering."""
+    global LIVE_PORT
+    import console
+    import update
+    cfg = core.load_config()
+    wanted = int(os.environ.get("ZET_PORT") or cfg.get("port") or 8100)
+    port, note = portpick.pick("127.0.0.1", wanted)
+    LIVE_PORT = port
+    portpick.announce("zet", port)
+    core.log_event("system", "zet map started on port %d" % port)
+    threading.Thread(target=monitor, daemon=True).start()
+    library = core.APP_DIR.replace(os.path.expanduser("~"), "~", 1)
+    try:
+        action = console.run(app, "127.0.0.1", port, core.VERSION, library, note=note,
+                             on_check=update.check, on_update=update.apply)
+    except KeyboardInterrupt:
+        action = "quit"
+        print("\n  stopped.")
+    if action == "restart":
+        portpick.forget("zet", port)
+        os.environ["ZET_PORT"] = str(port)
+        os.environ["ZET_NO_BROWSER"] = "1"          # the page is already open at this port
+        sys.stdout.flush()
+        os.execv(sys.executable, [sys.executable, os.path.join(HERE, "app.py")] + sys.argv[1:])
+    return 0
 
 
 if __name__ == "__main__":
-    cfg = core.load_config()
-    port = find_available_port(int(os.environ.get("ZET_PORT") or cfg.get("port", 8080)))
-    url = "http://127.0.0.1:%d" % port
-    print("\033[38;5;220mZET Strike V6 on %s  (Ctrl-C stops it)\033[0m" % url)
-    core.log_event("system", "zet map started on port %d" % port)
-    threading.Thread(target=monitor, daemon=True).start()
-    open_in_chrome(url)
-    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    sys.exit(main())

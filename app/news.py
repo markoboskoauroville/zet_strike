@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""news.py - ZET Strike V6 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
+"""news.py - ZET Strike V7 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
 
 Gemini keys follow MANTRA_MANIFEST quota-and-fallback: four verdicts (ok, dead, cool, soft), one classifier
 that reads status AND body AND headers, each key tried at most once per call, resume at the last good key,
@@ -37,7 +37,7 @@ FEEDS = [
     ("Net.hr", "https://net.hr/feed"),
     ("Telegram", "https://www.telegram.hr/feed/"),
 ]
-KEY_SHAPE = re.compile(r"AIza[0-9A-Za-z_\-]{35}")
+KEY_SHAPE = re.compile(r"AQ\.[A-Za-z0-9_\-]{20,}")   # Gemini keys begin AQ. (keyring.md); AIza is a Google Cloud key
 CREDIT_WORDS = ("zero_credits", "e0300", "credit balance", "insufficient", "quota exceeded", "out of credits",
                 "payment required", "billing")
 _ring_lock = threading.Lock()
@@ -193,7 +193,8 @@ def _write_keys(keys):
 
 
 def extract_keys(text):
-    """By shape, never by eye. Gemini keys are AIza + 35 characters; pasted keys may arrive glued together."""
+    """By shape, never by eye. Gemini keys begin AQ. (keyring.md, MANTRA_MANIFEST); pasted keys may arrive
+    glued together. A lone long token is taken too, so a key of another shape can still be pasted alone."""
     found = KEY_SHAPE.findall(text or "")
     if not found:
         for piece in re.split(r"[\s,;]+", text or ""):
@@ -461,34 +462,38 @@ def generate(payload, models, timeout=90, counter=None):
 
 
 def test_keys():
-    """Free check of every key (lists models, spends no quota). Revives keys that work again."""
+    """The WORK probe for every key (keyring.md §2c): one token from a model the account itself lists,
+    never a list call alone, because a spent account lists its models with a cheerful 200.
+    probes.gemini_probe is KEYRING_TERMUX's, copied verbatim. Six states come back (works, valid,
+    no credit, rejected, throttled, unclear) and each moves the ring the way it should:
+    works revives, throttled rests, no credit and rejected are dead for now, the rest leave it alone."""
+    import probes
     results = []
     for key in _read_keys():
         fp = fingerprint(key)
-        status, body, headers, neterr = _http("GET", "%s/models?pageSize=200" % GEMINI_BASE, key, None, 20)
-        if neterr:
-            results.append({"fp": fp, "verdict": "network", "reason": neterr})
-            continue
-        verdict, wait, reason = classify(status, body, headers)
-        models = []
-        if verdict == "ok":
-            try:
-                for m in json.loads(body).get("models", []):
-                    if "generateContent" in m.get("supportedGenerationMethods", []):
-                        models.append(m["name"].split("/")[-1])
-            except Exception:
-                pass
+        r = probes.gemini_probe(key)
+        state, detail = r["state"], r["detail"]
+        if state == "works":
             with _ring_lock:
                 ring = _load_ring()
                 st = ring["keys"].setdefault(fp, {})
-                st.update({"state": "ok", "last": "test ok, %d models" % len(models), "t": time.time()})
+                st.update({"state": "ok", "last": "test: works, " + detail.split(" · ")[-1], "t": time.time(), "last_ok": time.time()})
                 st.pop("until", None)
                 _save_ring(ring)
-        elif verdict in ("dead", "cool"):
-            _mark(fp, verdict, reason, wait)
-        results.append({"fp": fp, "verdict": verdict, "reason": reason,
-                        "flash": sorted([m for m in models if "flash" in m and "image" not in m and "tts" not in m], reverse=True)[:8],
-                        "models": len(models)})
+        elif state == "throttled":
+            m = re.search(r"wait (\d+)s", detail)
+            _mark(fp, "cool", "test: " + detail, float(m.group(1)) if m else 60)
+        elif state == "no credit":
+            _mark(fp, "dead", "test: no credit, it needs a top-up or a paid plan")
+        elif state == "rejected":
+            _mark(fp, "dead", "test: " + detail)
+        else:
+            with _ring_lock:
+                ring = _load_ring()
+                st = ring["keys"].setdefault(fp, {"state": "new"})
+                st.update({"last": "test: " + detail, "t": time.time()})
+                _save_ring(ring)
+        results.append({"fp": fp, "state": state, "verdict": state, "reason": detail, "status": r.get("status")})
     return results
 
 

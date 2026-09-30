@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""core.py - ZET Strike V6 engine: live feed, timetable, line catalog, trip planner, event log."""
+"""core.py - ZET Strike V7 engine: live feed, timetable, line catalog, trip planner, event log."""
 import csv
 import hashlib
 import io
@@ -31,14 +31,14 @@ EVENTS_FILE = os.path.join(APP_DIR, "events.jsonl")
 FLEET_FILE = os.path.join(APP_DIR, "fleet.json")
 FEED_URL = os.environ.get("ZET_FEED_URL", "https://www.zet.hr/gtfs-rt-protobuf")
 STATIC_URL = os.environ.get("ZET_STATIC_URL", "https://www.zet.hr/gtfs-scheduled/latest")
-UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/6"
-VERSION = 6
+UA = "Mozilla/5.0 (Linux; Android 14) zet-strike/7"
+VERSION = 7
 SCHEMA = 6          # bump when index.json / lines.json layout changes
 ROUTE_TRAM = 0
 PARK_M = 400        # further than this from its own route = parked, not in service
 GONE_SECS = 300     # missing from the feed this long = left the feed
 DEFAULT_CONFIG = {
-    "port": 8080,
+    "port": 8100,       # ZET Strike's own number in the ports registry (MANTRA_MANIFEST ports.md); 8080 is the finder's
     "strike_start": "2026-09-28",
     "walk_kmh": 4.5,
     "max_walk_m": 1500,
@@ -102,6 +102,9 @@ def load_config():
     if isinstance(saved, dict):
         cfg.update(saved)
     if not os.path.exists(CONFIG_FILE):
+        save_config(cfg)
+    elif isinstance(saved, dict) and saved.get("port") == 8080:
+        cfg["port"] = DEFAULT_CONFIG["port"]      # V6 wrote 8080, which belongs to the finder; move once
         save_config(cfg)
     return cfg
 

@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""zet - ZET Strike V6 terminal: what runs, where to catch it, what the lines are, and the strike news."""
+"""zet - ZET Strike V7 terminal: what runs, where to catch it, what the lines are, and the strike news."""
 import argparse
 import getpass
 import json
@@ -474,21 +474,46 @@ def cmd_log(idx, lines, cfg, args):
 
 
 # ---------------------------------------------------------------- zet keys
+def cmd_google(rest):
+    """zet keys google: paste the Google Maps key (hidden). zet keys google test | del."""
+    import mapkey
+    sub = rest[0] if rest else "add"
+    if sub in ("del", "delete", "rm"):
+        print("  deleted" if mapkey.delete() else "  no Google key saved on this phone")
+        return 0
+    if sub == "add":
+        text = getpass.getpass("  Paste the Google Maps key, the text stays hidden: ") if sys.stdin.isatty() else sys.stdin.read()
+        r = mapkey.save(text)
+        if r.get("error"):
+            print(WARN + "  " + r["error"] + R)
+            return 1
+        print("  saved %s, testing it (one map session, one place)..." % r["fp"])
+    r = mapkey.test()
+    if r.get("error"):
+        print(WARN + "  " + r["error"] + R)
+        return 1
+    print("  %s  %s" % (r["fp"], r["detail"]))
+    print((OK if r["tiles"] == "works" else WARN) + "  " + r["map_says"] + R)
+    return 0 if r["tiles"] == "works" else 1
+
+
 def cmd_keys(idx, lines, cfg, args):
     sub = args.rest[0] if args.rest else "list"
+    if sub == "google":
+        return cmd_google(args.rest[1:])
     if sub == "add":
         text = getpass.getpass("  Paste Gemini key(s), the text stays hidden: ") if sys.stdin.isatty() else sys.stdin.read()
         r = news.add_keys(text)
         print("  found %d, added %d, already had %d" % (r["found"], r["added"], r["duplicates"]))
         if r["added"]:
-            print("  checking them (free)...")
+            print("  checking them, one real token each...")
             sub = "test"
         else:
             return 0 if r["found"] else 1
     if sub == "test":
         for t in news.test_keys():
             extra = (", models: " + ", ".join(t.get("flash", [])[:4])) if t.get("flash") else ""
-            print("  %s  %-7s %s%s" % (t["fp"], t["verdict"], t["reason"], extra))
+            print("  %s  %-9s %s%s" % (t["fp"], t["verdict"], t["reason"], extra))
         return 0
     if sub in ("del", "delete", "rm") and len(args.rest) > 1:
         ok = news.remove_key(args.rest[1])
@@ -507,6 +532,13 @@ def cmd_keys(idx, lines, cfg, args):
     f.sep()
     f.row((" * = in use. Keys are shown by fingerprint only.", DIM))
     f.row((" zet keys add | test | del FINGERPRINT", DIM))
+    try:
+        import mapkey
+        g = mapkey.status()
+        f.row((" Google Maps key: ", T), ((g["fp"] + " from " + g["source"] + ", map tiles " + (g.get("tiles") or "not tested")) if g["has_key"] else "none", DIM))
+    except Exception:
+        pass
+    f.row((" zet keys google | google test | google del", DIM))
     f.bottom()
     emit(f.lines)
     return 0
@@ -545,7 +577,7 @@ def cmd_day(idx, lines, cfg, args):
     return 0
 
 
-HELP = """zet, ZET Strike V6
+HELP = """zet, ZET Strike V7
 
   zet                 what runs now, with next stops
   zet 17 228          only these lines
@@ -558,6 +590,7 @@ HELP = """zet, ZET Strike V6
   zet log             event log (zet log 100)
   zet watch           live board, refreshes every 20 s
   zet keys            Gemini keys (add, test, del)
+  zet keys google     the Google Maps key (paste, test, del)
   zet day             every vehicle seen today
   zet update          newest version from GitHub, then the timetable
   zet update check    only look, change nothing

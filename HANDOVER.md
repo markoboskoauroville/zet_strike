@@ -1,0 +1,85 @@
+# ZET Strike: handover
+
+    version      V7 (30.9.2026)
+    repository   markoboskoauroville/zet_strike (public)
+    command      zet, and zet map for the server
+    port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
+    data         ~/.zet-strike   keys in ~/.zet-strike/secrets (0600)
+
+## The request, word for word (30.9.2026)
+
+> Zet strike We are working on this app. Please build the Flask server for it and see in manifest how
+> to build Flask server, what are those, uh, what is our style of working and what kind of ask UART we
+> are using. And see this screenshot for the example where we are now with this app and how we want it
+> to look. Even if there are no vehicles running, I need to have my web interface with the maps and
+> settings so I can enter the Gemini key and Google Map key, and we need to be able to test the keys.
+> Everything is in the manifest. You need to read manifest to understand how to build my applications.
+
+Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
+(the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## What V7 is
+
+The Termux app shape of the manifest (`termux-app.md`), on top of V6's engine, which is unchanged:
+
+| part | from | what |
+|---|---|---|
+| `console.py` | MA READER's look, KEYRING_TERMUX's opener and keys | the banner and O A U R Q; plain lines, never a box |
+| `portpick.py` | KEYRING_TERMUX, verbatim | 8100 then the next fifteen then any; the live registry `~/.mantra/ports/zet` |
+| `localguard.py` | KEYRING_TERMUX, verbatim | Host, Origin/Referer, and the `X-ZET` header on every `/api/` call |
+| `probes.py` | KEYRING_TERMUX, verbatim | the work probes: `gemini_probe`, `google_probe` |
+| `mapkey.py` | new | the Google Maps key (env, 0600 file, `keyring get google`), its test, the tile proxy |
+| `vendor.py` | new | Leaflet 1.9.4 fetched once, SHA-256 checked, served from the phone |
+| `tools/manifest.py` | new | writes `app/MANIFEST.json`; `--check` fails when it is stale |
+| `tests/` | new | the four tests, 78 checks |
+
+## Decided, and why
+
+- **Port 8100.** V6 used 8080, which the manifest reserves for the Shop Finder. A V6 config that
+  says 8080 is moved to 8100 once, on first load.
+- **127.0.0.1, not 0.0.0.0.** It holds keys (`termux-app.md` §7). A laptop on the same wifi cannot
+  reach it; that is the point.
+- **Waitress**, with the Flask dev server as a spoken fallback.
+- **The Google key never reaches the page.** Tiles come through `/tile/google/z/x/y`, made with a Map
+  Tiles session; the tile address carries a per-run token only the page can read, and the guard
+  refuses a tile asked for by another site. A foreign page cannot spend the key.
+- **For the map, the verdict is the Tiles line.** A key that works only for Places is a good key
+  that cannot draw this map, and the page says exactly that ("enable the Map Tiles API").
+- **The Gemini test does work**, one token, not a list call (`keyring.md` §2c). V6 listed models
+  and called a spent account "ok". The test now costs a fraction of a cent per key.
+- **Gemini keys are found by `AQ.`** (`keyring.md`); V6 looked for `AIza`, which is the Google Cloud
+  (Maps) shape. A lone pasted token of any shape is still taken.
+- **The page no longer dies without unpkg.** V6 loaded Leaflet from unpkg on every visit; with no
+  signal the whole script stopped, settings included. Now the server keeps its own checked copy,
+  and if even that is missing, every map call is a no-op and the rest of the page works.
+- **The U key uses V6's updater** (MANIFEST.json checksums), not git: the phone install is not a
+  checkout. After `y` the server restarts as the same process on the same port.
+- **Branch installs.** `ZET_BRANCH` at install time; `VERSION.json` remembers it, so `zet update`
+  and U follow that branch until reinstalled from `main`.
+- **The page: added to, not changed** (`design-language.md`, "you add to it"). New: the favicon,
+  the Google Maps key card, the map choice (OpenStreetMap, Google, my own server), "no vehicle
+  reporting" in the status line, V7 at the foot of settings linking to this repository.
+
+## NOT TESTED
+
+Everything below is unproven until it runs on the phone:
+
+- `pkg install`, `pip install waitress` in Termux, and waitress importing on the phone's Python
+- `termux-open-url` with `com.android.chrome` opening real Chrome (a stand-in was on the PATH)
+- `pm list packages` on the phone
+- the page on the phone itself: at 390 px in headless Chromium it has no script error and nothing
+  wider than the screen, but not at 250% text size and not with a thumb
+- a real Google Maps key: only a made-up key against real Google (it answered "rejected", as it
+  must). A key with the Map Tiles API enabled, and the Google map drawing, are not seen
+- a real Gemini key through the new work probe
+- the ZET feed and timetable: zet.hr is blocked from the cloud machine, so every test ran with no
+  feed (which is also the case asked for: no vehicles, the page still whole)
+- OpenStreetMap tiles in the browser (blocked here too)
+- `install.sh` end to end; its Python part and `bash -n` only
+
+## What is left
+
+- Merge the branch to `main` once it has run on the phone; `main` is what `zet update` serves.
+- The Gemini summary still names its models in config (`gemini-3.7-flash` …). The manifest says ask
+  for the list (`model-self-repair.md`); the probe already does, the summary does not.
+- Nine gates (`delivery-gate.md`) have not been run: this app has no `gates/` yet.

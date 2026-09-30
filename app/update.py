@@ -12,7 +12,6 @@ import urllib.request
 import core
 
 REPO = os.environ.get("ZET_REPO", "markoboskoauroville/zet_strike")
-BRANCH = "main"
 API = os.environ.get("ZET_GITHUB_API", "https://api.github.com")
 RAW = os.environ.get("ZET_GITHUB_RAW", "https://raw.githubusercontent.com")
 LOCAL = os.path.join(core.APP_DIR, "VERSION.json")
@@ -32,6 +31,16 @@ def installed():
     return d if isinstance(d, dict) else {}
 
 
+def branch():
+    """main, unless this phone was installed from a test branch (ZET_BRANCH at install time), which
+    VERSION.json remembers, so `zet update` and the U key keep following the branch it came from."""
+    b = os.environ.get("ZET_BRANCH") or installed().get("branch") or "main"
+    return b if all(ch.isalnum() or ch in "._-/" for ch in b) and ".." not in b else "main"
+
+
+BRANCH = branch()
+
+
 def latest_commit():
     """Newest commit on main. Falls back to the branch name when the API is out of reach or rate limited."""
     try:
@@ -48,7 +57,7 @@ def remote_manifest(ref):
     if not isinstance(m, dict) or not isinstance(m.get("files"), dict) or not m["files"]:
         raise ValueError("MANIFEST.json in the repo is not valid")
     for name in m["files"]:
-        if "/" in name or "\\" in name or name.startswith(".") or not name.endswith((".py", ".html")):
+        if not isinstance(name, str) or "/" in name or "\\" in name or name.startswith(".") or not name.endswith((".py", ".html")):
             raise ValueError("MANIFEST.json lists an unsafe file name: %r" % name)
     return m
 
@@ -59,7 +68,7 @@ def check():
     have = installed()
     same = have.get("files") == m["files"]
     return {"current": have.get("version", "?"), "current_commit": (have.get("commit") or "")[:7],
-            "latest": m.get("version", "?"), "latest_commit": ref[:7] if ref != BRANCH else "main",
+            "latest": m.get("version", "?"), "latest_commit": ref[:7] if ref != BRANCH else BRANCH,
             "up_to_date": same, "ref": ref, "manifest": m, "notes": m.get("notes", "")}
 
 
@@ -90,7 +99,8 @@ def apply(force=False):
         with open(tmp, "wb") as f:
             f.write(data)
         os.replace(tmp, os.path.join(core.APP_DIR, name))
-    core.save_json(LOCAL, {"version": m.get("version"), "commit": ref, "files": m["files"], "installed": time.time()})
+    core.save_json(LOCAL, {"version": m.get("version"), "commit": ref, "files": m["files"], "installed": time.time(),
+                           "branch": BRANCH})
     migrate()
     olds = sorted(os.listdir(BACKUPS))
     for old in olds[:-5]:
