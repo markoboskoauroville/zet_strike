@@ -47,14 +47,14 @@ check("a key is found inside a labelled note", mapkey.extract("my maps key: %s (
 check("nothing key-shaped, nothing found", mapkey.extract("hello there") is None)
 r = mapkey.save("google " + k)
 check("save answers the fingerprint, not the key", r.get("saved") and r["fp"] == mapkey.fingerprint(k) and k not in str(r))
-mode = stat.S_IMODE(os.stat(mapkey.KEY_FILE).st_mode)
+mode = stat.S_IMODE(os.stat(mapkey.KEYS_FILE).st_mode)
 dmode = stat.S_IMODE(os.stat(mapkey.SECRET_DIR).st_mode)
 check("the key file is 0600 and its folder 0700", mode == 0o600 and dmode == 0o700, (oct(mode), oct(dmode)))
 st = mapkey.status()
 check("status says where it came from and never carries the key", st["source"] == "this phone" and k not in str(st))
 body = c.get("/api/settings", headers=H).get_data(as_text=True)
 check("the settings answer never carries the key", k not in body and st["fp"] in body)
-check("delete removes it", mapkey.delete() and not os.path.exists(mapkey.KEY_FILE) and not mapkey.status()["has_key"])
+check("delete removes it", mapkey.delete() and mapkey.saved_keys() == [] and not mapkey.status()["has_key"])
 os.environ["ZET_GOOGLE_KEY"] = k
 check("the environment is asked first (keyring.md §11)", mapkey.current() == (k, "environment"))
 del os.environ["ZET_GOOGLE_KEY"]
@@ -80,6 +80,52 @@ import vendor  # noqa: E402
 check("a map library that fails its checksum is not accepted", not vendor._ok("leaflet.js", b"console.log('not leaflet')"))
 check("only the two known files are served", vendor.get("../secrets/google_key") is None and vendor.get("other.js") is None)
 
+
+# ---------------------------------------------------------------- key files: the Keyring parser, titles
+import keyparse  # noqa: E402
+import labels  # noqa: E402
+
+ga, gb, mk = "AQ." + fake_key("Ab", 50, seed=1), "AQ." + fake_key("Ab", 50, seed=2), fake_key(seed=3)
+note = """# keyring v1
+provider: google
+label: maps phone
+key: %s
+
+AV LIVE VMIX
+%s
+
+caffeteria
+https://aistudio.google.com/app?srsltid=AfmBOoq123456789012345678901234
+%s
+cancelled 3.9.2026
+
+claude
+%s
+""" % (mk, ga, gb, "sk-ant-api03-" + fake_key("", 90, seed=4))
+got = [(e["provider"], e["label"]) for e in keyparse.parse(note, "keys.txt")]
+check("the keyring v1 block, then each note block: provider by shape, title by elimination",
+      got == [("google", "maps phone"), ("gemini", "AV LIVE VMIX"), ("gemini", "caffeteria"), ("anthropic", "claude")], got)
+one = keyparse.parse("google maps: " + mk, "")
+check("key and name on one line: the title is the words beside it, never the key", [e["label"] for e in one] == ["google maps"], [e["label"] for e in one])
+check("a title given with a key in it is stored without the key", labels.set("fpx", "phone " + ga) == "phone")
+check("a note with 'gemini' in it still files an AIza key as Google", keyparse.parse("gemini\n" + fake_key(seed=5), "")[0]["provider"] == "google")
+r = labels.import_text(note, "keys.txt")
+check("import: 2 Gemini and 1 Google key taken, the Anthropic one counted and left alone",
+      r["gemini"] == 2 and r["google"] == 1 and r["other"] == {"anthropic": 1} and r["titled"] == 3, r)
+check("the titles are stored beside the fingerprints", labels.get(news.fingerprint(ga)) == "AV LIVE VMIX" and labels.get(mapkey.fingerprint(mk)) == "maps phone")
+lmode = stat.S_IMODE(os.stat(labels.LABELS_FILE).st_mode)
+check("the titles file is 0600 (a title is often an account name)", lmode == 0o600, oct(lmode))
+body = c.get("/api/settings", headers=H).get_data(as_text=True)
+check("the settings answer carries the titles and never a key", "AV LIVE VMIX" in body and "maps phone" in body and not any(k in body for k in (ga, gb, mk)))
+check("the summary is one sentence for a person", labels.summary(r) == "keys.txt: 2 Gemini keys, 1 Google Maps key added, 3 with a title; not used by this app: 1 anthropic.", labels.summary(r))
+r2 = labels.import_text(note, "keys.txt")
+check("the same file again: nothing new, three already here", r2["gemini"] == 0 and r2["google"] == 0 and r2["duplicates"] == 3, r2)
+mapkey.add([fake_key(seed=6)])
+st = mapkey.status()
+check("two Google keys: the first stays in use until another is chosen", len(st["keys"]) == 2 and st["fp"] == mapkey.fingerprint(mk)
+      and [k["active"] for k in st["keys"]] == [True, False])
+check("choosing the other one", mapkey.select(st["keys"][1]["fp"]) and mapkey.status()["fp"] == st["keys"][1]["fp"])
+check("choosing a key that is not here does nothing", not mapkey.select("nothere") and mapkey.status()["fp"] == st["keys"][1]["fp"])
 
 # ---------------------------------------------------------------- traffic: nothing downloaded twice
 import time  # noqa: E402

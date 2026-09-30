@@ -80,11 +80,25 @@ cannot be reached: map, near me, lines, news, log and settings.
 
 ## Keys
 
-Settings in the page, or `zet keys` in Termux.
+**From a file:** Settings, **Choose key files…** (the phone's own file dialog, several files at
+once; a **File…** button also sits beside each paste box), or `zet keys import FILE...` in Termux.
+Your key notes as they are: every Gemini key (`AQ.`) and Google Maps key (`AIza`) in them is found
+by its shape, and the name written above it becomes its title. The Keyring app's export
+(`# keyring v1`, `provider:` / `label:` / `key:`) is read too. Anything else in the note is left
+alone; keys this app has no use for are counted and not kept.
+
+    AV LIVE VMIX
+    AQ.Ab8RN6...
+
+    caffeteria
+    AQ.Ab8RN6...
+
+Every key has a title; **Rename** changes it. Paste boxes and `zet keys` still work.
 
 - **Gemini** (for the news summary): several keys, used in order with fallback. Gemini keys begin `AQ.`.
-- **Google Maps** (for the Google map): one key, beginning `AIza`. The map needs the **Map Tiles API**
-  enabled for the key's project. The tiles come through this app, so the key never goes into the page.
+- **Google Maps** (for the Google map): several keys may be kept, a radio chooses the one in use.
+  They begin `AIza`. The map needs the **Map Tiles API** enabled for the key's project. The tiles
+  come through this app, so the key never goes into the page.
 
 **Test** asks each provider for real work, not only whether the key exists: one token from Gemini;
 a map session, a place, a geocode from Google. The answer is one of: works, valid, no credit,

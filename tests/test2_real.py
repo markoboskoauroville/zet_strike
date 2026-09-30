@@ -28,7 +28,7 @@ try:
     check("the banner comes up", con.wait_for(r"\[Q\] stop", 20), con.text()[-600:])
     t = con.text()
     check("MA READER's shape: name, where, library, version", all(s in t for s in (
-        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V9")), t[-600:])
+        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V10")), t[-600:])
     check("the five keys, one per line", all(s in t for s in (
         "[O] open in Chrome", "[A] open in the default browser", "[U] update the app", "[R] restart", "[Q] stop")))
     check("plain lines, never a box", not any(ch in t for ch in "┌┐└┘│"))
@@ -48,7 +48,7 @@ try:
     check("no vehicle and the feed unreachable: the API still answers, with the reason", st == 200 and live.get("vehicles") == [] and "feed" in (live.get("error") or ""), live)
     st, body, _ = http(base + "/api/settings", headers=H)
     s = json.loads(body or b"{}")
-    check("settings answer: the port bound, V9, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 9
+    check("settings answer: the port bound, V10, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 10
           and s["google"]["has_key"] and s["google"]["source"] == "environment" and key not in body.decode())
 
     st, img, hdr = http(base + s["google_tiles"].replace("{z}", "3").replace("{x}", "4").replace("{y}", "2"))
@@ -90,7 +90,7 @@ try:
         check("in Chromium at 390 px: no script error, nothing wider than the phone", not out.get("errs") and out.get("width") == 390, out)
         check("the settings show the Google key by fingerprint, Test live, Google choosable", out.get("gfp") == s["google"]["fp"]
               and out.get("gtest") is False and out.get("google") is False, out)
-        check("the version sits at the foot of settings", out.get("ver") == "V9")
+        check("the version sits at the foot of settings", out.get("ver") == "V10")
     else:
         skipped("the page in Chromium", "no node or playwright here")
 
@@ -124,6 +124,74 @@ try:
 finally:
     con.kill()
 
+
+# ---------------------------------------------------------------- the file picker, in a real browser
+# Marko, 30.9.2026: "a file picker for the keys ... multiple keys and each key can have title".
+if node and os.path.isdir(pw):
+    fresh_home()
+    kdir = tempfile.mkdtemp(prefix="zet-keys-")
+    ga, gb = "AQ." + fake_key("Ab", 50, seed=31), "AQ." + fake_key("Ab", 50, seed=32)
+    m1, m2 = fake_key(seed=33), fake_key(seed=34)
+    with open(os.path.join(kdir, "gemini.txt"), "w") as f:
+        f.write("AV LIVE VMIX\n%s\n\ncaffeteria\n%s\n" % (ga, gb))
+    with open(os.path.join(kdir, "maps.keys.txt"), "w") as f:
+        f.write("# keyring v1\n\nprovider: google\nlabel: maps phone\nkey: %s\n\nprovider: google\nlabel: maps laptop\nkey: %s\n" % (m1, m2))
+    port4 = free_port()
+    envk = dict(os.environ, ZET_PORT=str(port4), ZET_NO_CONSOLE="1", ZET_NO_BROWSER="1", ZET_POLL="3600",
+                ZET_FEED_URL="http://127.0.0.1:9/x", ZET_STATIC_URL="http://127.0.0.1:9/x")
+    srv = subprocess.Popen([sys.executable, os.path.join(APP, "app.py")], env=envk, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        import time as _t
+        for _ in range(60):
+            if http("http://127.0.0.1:%d/health" % port4, 1)[0] == 200:
+                break
+            _t.sleep(0.2)
+        js = tempfile.mktemp(suffix=".js")
+        with open(js, "w") as f:
+            f.write("""const {chromium} = require(%r);
+(async () => { const b = await chromium.launch(); const p = await b.newPage({viewport: {width: 390, height: 844}});
+ const errs = []; p.on('pageerror', e => errs.push(e.message));
+ await p.goto('http://127.0.0.1:%d/'); await p.waitForTimeout(800);
+ await p.click('#tabs button[data-v="set"]'); await p.waitForTimeout(500);
+ const pickerVisible = await p.isVisible('#b-kfile');
+ const [chooser] = await Promise.all([p.waitForEvent('filechooser'), p.click('#b-kfile')]);
+ const multiple = chooser.isMultiple();
+ await chooser.setFiles([%r, %r]);
+ await p.waitForFunction(() => /added/.test(document.getElementById('kfmsg').textContent), null, {timeout: 20000});
+ const msg = await p.textContent('#kfmsg');
+ await p.waitForTimeout(800);
+ const gem = await p.$$eval('#keys .ktitle', els => els.map(e => e.textContent));
+ const goo = await p.$$eval('#gkeys .ktitle', els => els.map(e => e.textContent));
+ const radios = await p.$$eval('#gkeys input[name=guse]', els => els.map(e => e.checked));
+ await p.check('#gkeys input[name=guse] >> nth=1'); await p.waitForTimeout(800);
+ const inUse = await p.textContent('#gfp');
+ p.once('dialog', d => d.accept('main account'));
+ await p.click('#keys button[data-act=ren] >> nth=0'); await p.waitForTimeout(800);
+ const renamed = await p.$$eval('#keys .ktitle', els => els.map(e => e.textContent));
+ const html = await p.content();
+ const small = await p.$$eval('.kpick', els => els.length);
+ console.log(JSON.stringify({errs, pickerVisible, multiple, msg, gem, goo, radios, inUse, renamed, small,
+   leaked: [%r, %r, %r, %r].some(k => html.includes(k)), width: await p.evaluate(() => document.documentElement.scrollWidth)}));
+ await b.close(); })();""" % (pw, port4, os.path.join(kdir, "gemini.txt"), os.path.join(kdir, "maps.keys.txt"), ga, gb, m1, m2))
+        r = subprocess.run([node, js], capture_output=True, text=True, timeout=120)
+        try:
+            out = json.loads(r.stdout.strip().splitlines()[-1])
+        except Exception:
+            out = {"errs": [r.stderr[-400:]]}
+        check("Choose key files opens the phone's file dialog, and takes several files at once", out.get("pickerVisible") and out.get("multiple") is True, out)
+        check("both files read: two Gemini keys, two Google keys, all with titles", "2 Gemini keys added, 2 with a title" in out.get("msg", "")
+              and "2 Google Maps keys added, 2 with a title" in out.get("msg", ""), out.get("msg"))
+        check("the Gemini keys carry their names from the note", out.get("gem") == ["AV LIVE VMIX", "caffeteria"], out.get("gem"))
+        check("the Google keys carry theirs from the keyring file, the first in use", out.get("goo") == ["maps phone", "maps laptop"] and out.get("radios") == [True, False], out)
+        check("the radio chooses the other Google key", (out.get("inUse") or "").startswith("maps laptop"), out.get("inUse"))
+        check("Rename gives a key a new title", (out.get("renamed") or [""])[0] == "main account", out.get("renamed"))
+        check("a File button beside each paste box too", out.get("small") == 2)
+        check("no key ever reaches the page, no script error, nothing wider than the phone", out.get("leaked") is False and not out.get("errs") and out.get("width") == 390, out)
+    finally:
+        srv.terminate()
+        srv.wait(5)
+else:
+    skipped("the file picker in Chromium", "no node or playwright here")
 
 # ---------------------------------------------------------------- traffic: the real server against a stand-in ZET
 # Every request ZET would see is written down by the stand-in, so what is measured is traffic, not intent.

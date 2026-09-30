@@ -1,20 +1,22 @@
 {
-  "version": 9,
-  "notes": "V9: mobile data. Every download goes through one cache shared by the server and every zet command: a copy young enough is used, ZET is asked 'has it changed?' (304, no body), gzip. The live feed every 20 s only while a page is on screen; 5 min by day and 15 at night with none. The 13 MB timetable is checked once a day by a HEAD and downloaded only when ZET changes it; zet update no longer forces it. News feeds the same way. zet data and the Data card in Settings show today's use. V8: zet alone is the server.",
+  "version": 10,
+  "notes": "V10: keys from files. Choose key files (the phone's file dialog, several at once) and File beside each paste box; the Keyring parser (KEYRING_TERMUX ring.py) finds every Gemini (AQ.) and Google Maps (AIza) key by shape and its title by elimination; titles on every key, Rename; several Google keys, a radio for the one in use; zet keys import FILE. V9: mobile data. V8: zet alone is the server.",
   "files": {
-    "app.py": "55e062eceec6dd905cb26a0a23cdea787d76797857287a095dfd5c2485f680c6",
+    "app.py": "c8a282c4a0d52d4f4473e3dee5ef42609b87bbf886ee685d555de3e1fbd5ab7f",
     "console.py": "095421a3ae8f495674b13daf04163e36e3876e8c8804f4cfa57215ec359b0363",
-    "core.py": "4e226881b19bf89a46c49c24bfa985860cb209fb4fe231534401f04972c4afe7",
-    "index.html": "978c2536090d9c822e5873f73cbe3cba14b9f22fabb21106705d45883a63c815",
+    "core.py": "0abfa625017bd6a7935003f25f9ec8189845f095f1848d5877bac12854b870be",
+    "index.html": "fe43e523c9057870dd25247b43eaaf29f42289c3cf0d03cd31c929ae31329ea7",
+    "keyparse.py": "583ff5c0fe93923369be3213c8591a63ffea58b43fafbac9ad466f95f2f394de",
+    "labels.py": "a7707a18f26c0acc7ba8139df70ffe234686eaecf17e664b5608732fd56cc7b7",
     "localguard.py": "d681a09cecbd2b3dce0bcd016983e2473b513d70909b21c3c018ab081f6bb6fa",
-    "mapkey.py": "db2a5567d1ac43b4a8bd659b8bdf4f8bef8f4b1972bba92b4f8244ee183d091d",
+    "mapkey.py": "99fd2babbc0a11e8e8fe5f3620e8ad537370002fcd1bf9753bcbdc1f1ae0faa1",
     "net.py": "76b7158e2531154f6d9ecf7c5f2627d6024412059c4a0941812b1591bf7b6233",
-    "news.py": "3f7f22026e5c3471a86a025b371dc875f0aa7724c4bcf368f73ddfcb5e3a508c",
+    "news.py": "194f16e350fb51b5da6caf1790b06c78eebe08e9aea5f5efe667c0ce5d4ae096",
     "portpick.py": "bff780b5519fd21bb7e2405f0900f84407c00c7f2cf153ef0927acc522891625",
     "probes.py": "d06712fa44fc1fb7199870274f2745e19e5b841d23015b2b50204f38abce6bc2",
     "update.py": "3ff51ffa42e9fd382fe1bcddd00872978470e13c874d875ddcd31ccee5e9eb0e",
     "vendor.py": "63f7455dcadb17ab09c4426759002bc85a01d85500b88cc714956b742e0b8a86",
-    "zet.py": "f1567214ac7904659d246b9ad757a02e98d5f35503dd142dbfc274b3c2221f8a",
+    "zet.py": "1b86501f418084317a3928bd58f7518faa5c8ccbda83880a432a4250d928c0b4",
     "zs.py": "870d0bfbefb7a4e9aaa41863fd2fb5618c344ce32e094aba391196bdc8fa4fb7"
   }
 }

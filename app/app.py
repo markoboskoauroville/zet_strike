@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""app.py - ZET Strike V9 in Chrome (zet, the server): live map, near me, lines, news desk, event log, settings.
+"""app.py - ZET Strike V10 in Chrome (zet, the server): live map, near me, lines, news desk, event log, settings.
 
 A monitor thread polls the ZET feed every 20 s, writes what changed into the event log, collects headlines
 every few minutes and asks Gemini for a fresh summary when something new happened. Pages only read memory.
@@ -32,6 +32,7 @@ from flask import Flask, Response, jsonify, request, send_file
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 app = Flask(__name__)
 app.logger.disabled = True
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024       # key files are notes, not archives
 
 LIVE = {"ready": False, "error": "starting, loading the ZET timetable", "t": 0, "feed_ts": 0, "vehicles": []}
 LOCK = threading.Lock()
@@ -403,6 +404,51 @@ def api_keys_add():
     return jsonify(news.add_keys((request.get_json(silent=True) or {}).get("text", "")))
 
 
+@app.route("/api/keys/import", methods=["POST"])
+def api_keys_import():
+    """The file picker (multipart, any number of files) or text: every key found by the Keyring parser,
+    with its title, sorted into Gemini and Google (labels.import_text)."""
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    import labels
+    results = []
+    if request.files:
+        for f in request.files.getlist("file"):
+            raw = f.read(app.config["MAX_CONTENT_LENGTH"])
+            name = os.path.basename(f.filename or "picked file")[:80]
+            if b"\x00" in raw[:4096]:
+                results.append({"source": name, "found": 0, "gemini": 0, "google": 0, "duplicates": 0, "titled": 0,
+                                "other": {}, "error": "not a text file", "say": name + ": not a text file, nothing read."})
+                continue
+            r = labels.import_text(raw.decode("utf-8", "replace"), name)
+            r["say"] = labels.summary(r)
+            results.append(r)
+    else:
+        text = str((request.get_json(silent=True) or {}).get("text") or "")
+        if not text.strip():
+            return jsonify({"error": "Nothing to import."}), 400
+        r = labels.import_text(text, "pasted")
+        r["say"] = labels.summary(r)
+        results.append(r)
+    for r in results:
+        r.pop("gemini_fps", None)
+        r.pop("google_fps", None)
+    return jsonify({"results": results, "ring": news.ring_status(), "google": mapkey.status()})
+
+
+@app.route("/api/keys/title", methods=["POST"])
+def api_keys_title():
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    import labels
+    d = request.get_json(silent=True) or {}
+    fp = str(d.get("fp") or "")
+    known = {k["fp"] for k in news.ring_status()["keys"]} | {k["fp"] for k in mapkey.status()["keys"]}
+    if fp not in known:
+        return jsonify({"error": "No key with fingerprint %s." % fp[:12]}), 404
+    return jsonify({"fp": fp, "title": labels.set(fp, d.get("title", ""))})
+
+
 @app.route("/api/keys/test", methods=["POST"])
 def api_keys_test():
     if not guard():
@@ -446,15 +492,25 @@ def api_google_save():
 def api_google_test():
     if not guard():
         return jsonify({"error": "forbidden"}), 403
-    r = mapkey.test()
+    fp = (request.get_json(silent=True) or {}).get("fp")
+    r = mapkey.test(str(fp) if fp else None)
     return jsonify(r), (400 if r.get("error") else 200)
+
+
+@app.route("/api/google/select", methods=["POST"])
+def api_google_select():
+    if not guard():
+        return jsonify({"error": "forbidden"}), 403
+    ok = mapkey.select(str((request.get_json(silent=True) or {}).get("fp") or ""))
+    return jsonify({"selected": ok, "google": mapkey.status()}), (200 if ok else 404)
 
 
 @app.route("/api/google/delete", methods=["POST"])
 def api_google_delete():
     if not guard():
         return jsonify({"error": "forbidden"}), 403
-    return jsonify({"deleted": mapkey.delete()})
+    fp = (request.get_json(silent=True) or {}).get("fp")
+    return jsonify({"deleted": mapkey.delete(str(fp) if fp else None)})
 
 
 @app.route("/stream")

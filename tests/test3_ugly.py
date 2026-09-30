@@ -65,13 +65,13 @@ check("a key Google refuses: the tile answers 502 with why, never a broken image
 del os.environ["ZET_GOOGLE_KEY"]
 
 r = c.post("/api/google/save", json={"text": "hello, this is not a key"}, headers=H)
-check("nothing key-shaped pasted: a sentence, nothing saved", r.status_code == 400 and "AIza" in r.get_json()["error"] and not os.path.exists(mapkey.KEY_FILE))
+check("nothing key-shaped pasted: a sentence, nothing saved", r.status_code == 400 and "AIza" in r.get_json()["error"] and mapkey.saved_keys() == [])
 r = c.post("/api/google/test", json={}, headers=H)
 check("test with no key: a sentence saying where to put one", r.status_code == 400 and "Settings" in r.get_json()["error"])
 r = c.post("/api/google/delete", json={}, headers=H)
 check("delete with no key: says nothing was there", r.get_json() == {"deleted": False})
 r = c.post("/api/google/save", json={"text": key}, headers={"Host": H["Host"], "Content-Type": "application/json"})
-check("a save without the page's header is refused", r.status_code == 403 and not os.path.exists(mapkey.KEY_FILE))
+check("a save without the page's header is refused", r.status_code == 403 and mapkey.saved_keys() == [])
 
 # ---------------------------------------------------------------- the map library cannot be fetched
 import vendor  # noqa: E402
@@ -117,6 +117,35 @@ else:
     skipped("the page without its map library", "no node or playwright here")
 
 tiles.stop()
+
+# ---------------------------------------------------------------- key files that are not what they should be
+import io  # noqa: E402
+import news  # noqa: E402
+
+def pick(files):
+    data = {"file": [(io.BytesIO(b), n) for n, b in files]}
+    return c.post("/api/keys/import", data=data, headers=H, content_type="multipart/form-data")
+
+r = pick([("photo.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00binary" + b"\x00" * 100)])
+check("a picture picked by mistake: 'not a text file', nothing read", r.status_code == 200 and "not a text file" in r.get_json()["results"][0]["say"])
+r = pick([("shopping.txt", b"milk\nbread\nhttps://shop.example/?srsltid=AfmBOoq1234567890123456789012345\n")])
+j = r.get_json()["results"][0]
+check("a note with no key in it: says so, and a tracking token is not a key", j["found"] == 0 and "no key found" in j["say"], j)
+r = pick([("huge.txt", b"a" * (3 * 1024 * 1024))])
+check("a file over 2 MB is refused before it is read", r.status_code == 413)
+gk = "AQ." + fake_key("Ab", 50, seed=91)
+r = pick([("one.txt", ("kalabhumi\n%s\n" % gk).encode())])
+r = pick([("again.txt", ("kalabhumi\n%s\n" % gk).encode())])
+j = r.get_json()["results"][0]
+check("the same key picked twice: 'already here', one copy kept", j["gemini"] == 0 and j["duplicates"] == 1 and len(news._read_keys()) == 1, j)
+fp = news.fingerprint(gk)
+r = c.post("/api/keys/title", json={"fp": "nothere", "title": "x"}, headers=H)
+check("renaming a key that is not here: 404", r.status_code == 404)
+r = c.post("/api/keys/title", json={"fp": fp, "title": "  a   very " + "long " * 40}, headers=H)
+check("a long title is kept to 60 characters, spaces tidied", len(r.get_json()["title"]) == 60 and r.get_json()["title"].startswith("a very long"), r.get_json())
+import labels  # noqa: E402
+c.post("/api/keys/delete", json={"fp": fp}, headers=H)
+check("deleting a key deletes its title", labels.get(fp) == "" and news._read_keys() == [])
 
 # ---------------------------------------------------------------- traffic, when the world misbehaves
 import core  # noqa: E402

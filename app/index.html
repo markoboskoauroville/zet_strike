@@ -72,6 +72,8 @@ label.set{display:block;margin:12px 0 4px;color:var(--dim)}
 .radio{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.radio label{background:var(--raise);border:1px solid var(--line);border-radius:18px;padding:8px 14px;font-size:16px}
 .radio input{accent-color:var(--amber);margin-right:6px}.radio label.off{opacity:.45}
 .apis{font-size:15px;color:var(--dim);margin-top:6px}.apis b{color:var(--text);font-weight:600}
+.ktitle{font-size:18px;font-weight:700;color:var(--gold)}.ktitle.none{color:var(--dim);font-weight:400;font-style:italic}.kfp{color:var(--dim);font-size:14px;margin-left:6px}
+.card .row{margin:8px 0 0}.card .btn{padding:8px 12px;font-size:15px}.card label.use{display:inline-flex;align-items:center;gap:6px;margin-right:8px}
 #ver{display:block;margin:26px 0 6px;color:var(--dim);font-size:14px;text-decoration:none}
 :focus-visible{outline:3px solid var(--you);outline-offset:2px}
 </style>
@@ -117,18 +119,24 @@ label.set{display:block;margin:12px 0 4px;color:var(--dim)}
 </section>
 
 <section class="view" id="v-set">
+  <h2>Keys from a file</h2>
+  <p class="note">Pick your key notes, one file or several. Every Gemini key (AQ.) and Google Maps key (AIza) in them is taken, with the name written above it as its title; everything else in the note is left alone.</p>
+  <div class="row"><button class="btn" id="b-kfile" type="button">Choose key files&hellip;</button>
+    <input type="file" id="kfile" multiple accept=".txt,.md,.keys,.csv,.json,.env,.conf,text/*" hidden></div>
+  <p class="note" id="kfmsg"></p>
   <h2>Gemini keys</h2>
   <p class="note">Keys stay on this phone in ~/.zet-strike/secrets, readable only by Termux. After saving they are shown only by fingerprint. If one key fails or runs out, the next one is used.</p>
-  <div class="row"><input type="password" id="keyin" placeholder="Paste one or more keys" autocomplete="off"><button class="btn" id="b-addkey" type="button">Add</button></div>
+  <div class="row"><input type="password" id="keyin" placeholder="Paste one or more keys" autocomplete="off"><button class="btn" id="b-addkey" type="button">Add</button><button class="btn ghost kpick" type="button">File&hellip;</button></div>
   <div id="keys"></div>
   <div class="row"><button class="btn ghost" id="b-test" type="button">Test all keys</button></div>
   <p class="note" id="keymsg"></p>
   <h2>Google Maps key</h2>
   <p class="note">For the Google map. It stays on this phone in ~/.zet-strike/secrets and never goes into the page: the map tiles come through this app. The test asks Google for real work, a map session and a place, not only whether the key exists.</p>
-  <div class="row"><input type="password" id="gkeyin" placeholder="Paste the Google Maps key (AIza...)" autocomplete="off"><button class="btn" id="b-gsave" type="button">Save</button></div>
+  <div class="row"><input type="password" id="gkeyin" placeholder="Paste the Google Maps key (AIza...)" autocomplete="off"><button class="btn" id="b-gsave" type="button">Save</button><button class="btn ghost kpick" type="button">File&hellip;</button></div>
   <div class="card" id="gkey"><b id="gfp">no key yet</b> <span class="tag" id="gstate">none</span><div class="note" id="gsrc"></div><div class="apis" id="gapis"></div></div>
   <div class="row"><button class="btn ghost" id="b-gtest" type="button" disabled>Test the key</button><button class="btn ghost" id="b-gdel" type="button" disabled>Delete</button></div>
   <p class="note" id="gmsg"></p>
+  <div id="gkeys"></div>
   <h2>News</h2>
   <label class="set" for="s-lang">Summary language</label><select id="s-lang"><option value="en">English</option><option value="hr">Hrvatski</option></select>
   <label class="set" for="s-ai">New AI summary every (minutes, 0 = only when I ask)</label><input type="number" id="s-ai">
@@ -153,7 +161,7 @@ label.set{display:block;margin:12px 0 4px;color:var(--dim)}
   <label class="set" for="s-buf">Arrive at the stop this early (minutes)</label><input type="number" id="s-buf">
   <label class="set" for="s-lay">Turnaround at the last stop (minutes)</label><input type="number" id="s-lay">
   <div class="row" style="margin-top:16px"><button class="btn" id="b-save" type="button">Save settings</button><span class="note" id="savemsg"></span></div>
-  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V9</a>
+  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V10</a>
 </section>
 
 <nav id="tabs">
@@ -417,12 +425,22 @@ async function logView() {
 setInterval(() => { if (view === "log") logView(); }, 10000);
 
 // ---------------------------------------------------------------- settings
+const title = k => k.label ? "<span class='ktitle'>" + esc(k.label) + "</span>" : "<span class='ktitle none'>no title</span>";
+async function rename(fp, old) {
+  const t = prompt("Title for key " + fp, old || "");
+  if (t === null) return;
+  const r = await api("/api/keys/title", {fp, title: t});
+  if (r.error) alert(r.error);
+  settings();
+}
 function renderKeys(ring) {
-  $("keys").innerHTML = ring.keys.length ? ring.keys.map(k => "<div class='card'><b>" + esc(k.fp) + "</b> " + (k.active ? "(in use) " : "") +
+  $("keys").innerHTML = ring.keys.length ? ring.keys.map(k => "<div class='card'>" + title(k) + "<span class='kfp'>" + esc(k.fp) + "</span> " + (k.active ? "(in use) " : "") +
     "<span class='tag " + esc(k.state) + "'>" + esc(k.state) + "</span>" + (k.rest ? "<span class='note'>free again in " + k.rest + " s</span>" : "") +
-    "<div class='note'>" + esc(k.last || "not used yet") + "</div><button class='btn ghost' data-fp='" + esc(k.fp) + "' type='button'>Delete</button></div>").join("")
+    "<div class='note'>" + esc(k.last || "not used yet") + "</div><div class='row'><button class='btn ghost' data-act='ren' data-fp='" + esc(k.fp) + "' data-t='" + esc(k.label || "") + "' type='button'>Rename</button>" +
+    "<button class='btn ghost' data-act='del' data-fp='" + esc(k.fp) + "' type='button'>Delete</button></div></div>").join("")
     : "<p class='note'>No keys yet.</p>";
   document.querySelectorAll("#keys button").forEach(b => b.onclick = async () => {
+    if (b.dataset.act === "ren") return rename(b.dataset.fp, b.dataset.t);
     if (!confirm("Delete key " + b.dataset.fp + "?")) return;
     await api("/api/keys/delete", {fp: b.dataset.fp}); settings();
   });
@@ -452,7 +470,7 @@ async function traffic() {
 }
 function renderGoogle(g) {
   const has = !!(g && g.has_key);
-  $("gfp").textContent = has ? g.fp : "no key yet";
+  $("gfp").textContent = has ? (g.label ? g.label + "  " : "") + g.fp : "no key yet";
   const st = has ? (g.tiles || g.state || "new") : "none";
   $("gstate").textContent = has ? "map " + (STATE_WORD[st] || st) : "none";
   $("gstate").className = "tag " + String(st).replace(" ", "");
@@ -461,7 +479,48 @@ function renderGoogle(g) {
   $("b-gtest").disabled = !has; $("b-gdel").disabled = !has || g.source !== "this phone";
   $("l-google").classList.toggle("off", !has);
   $("l-google").querySelector("input").disabled = !has;
+  const keys = (g && g.keys) || [];
+  $("gkeys").innerHTML = keys.length > 0 ? "<h3>Saved Google keys</h3>" + keys.map(k => "<div class='card'><label class='use'><input type='radio' name='guse' value='" + esc(k.fp) + "'" + (k.active ? " checked" : "") + ">in use</label>" +
+    title(k) + "<span class='kfp'>" + esc(k.fp) + "</span> <span class='tag " + esc(String(k.tiles || k.state || "new").replace(" ", "")) + "'>map " + esc(STATE_WORD[k.tiles || k.state] || k.tiles || k.state) + "</span>" +
+    "<div class='row'><button class='btn ghost' data-act='ren' data-fp='" + esc(k.fp) + "' data-t='" + esc(k.label || "") + "' type='button'>Rename</button>" +
+    "<button class='btn ghost' data-act='test' data-fp='" + esc(k.fp) + "' type='button'>Test</button><button class='btn ghost' data-act='del' data-fp='" + esc(k.fp) + "' type='button'>Delete</button></div></div>").join("") : "";
+  document.querySelectorAll("#gkeys input[name=guse]").forEach(r => r.onchange = async () => {
+    await api("/api/google/select", {fp: r.value}); const s = await api("/api/settings"); renderGoogle(s.google); tilesFrom(s);
+  });
+  document.querySelectorAll("#gkeys button").forEach(b => b.onclick = async () => {
+    const fp = b.dataset.fp;
+    if (b.dataset.act === "ren") return rename(fp, b.dataset.t);
+    if (b.dataset.act === "test") {
+      $("gmsg").textContent = "Asking Google for a map session and a place (a few seconds)...";
+      const r = await api("/api/google/test", {fp}); $("gmsg").textContent = r.error ? r.error : r.map_says; return settings();
+    }
+    if (!confirm("Delete Google key " + fp + " from this phone?")) return;
+    await api("/api/google/delete", {fp}); settings();
+  });
 }
+// the file picker (design-language.md §17, and Marko 30.9.2026: never keys without one): the button
+// opens the phone's own file dialog; every picked file goes to the server, which reads the keys in it
+$("b-kfile").onclick = () => $("kfile").click();
+document.querySelectorAll(".kpick").forEach(b => b.onclick = () => $("kfile").click());
+$("kfile").onchange = async () => {
+  const files = [...$("kfile").files];
+  if (!files.length) return;
+  $("kfmsg").textContent = "Reading " + files.map(f => f.name + " (" + (f.size < 1024 ? f.size + " B" : Math.round(f.size / 1024) + " KB") + ")").join(", ") + "...";
+  const fd = new FormData(); files.forEach(f => fd.append("file", f));
+  let r;
+  try {
+    const res = await fetch("/api/keys/import", {method: "POST", headers: {"X-ZET": "1"}, body: fd});
+    r = await res.json().catch(() => ({error: "bad answer from the app (" + res.status + ")"}));
+    if (res.status === 413) r = {error: "That file is too big for a key note (over 2 MB)."};
+  } catch (e) { r = {error: "The app is not answering."}; }
+  $("kfile").value = "";
+  if (r.error) { $("kfmsg").textContent = r.error; return; }
+  $("kfmsg").textContent = r.results.map(x => x.say).join(" ");
+  const newG = r.results.some(x => x.gemini), newM = r.results.some(x => x.google);
+  await settings();
+  if (newG) $("b-test").onclick();
+  if (newM) $("b-gtest").onclick();
+};
 $("b-addkey").onclick = async () => {
   const text = $("keyin").value; $("keyin").value = "";
   if (!text.trim()) return;

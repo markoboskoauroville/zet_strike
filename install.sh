@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# install.sh - ZET Strike (V9), installed straight from github.com/markoboskoauroville/zet_strike
+# install.sh - ZET Strike (V10), installed straight from github.com/markoboskoauroville/zet_strike
 #   curl -fsSL https://raw.githubusercontent.com/markoboskoauroville/zet_strike/main/install.sh | bash
 # A test branch before it reaches main:  ... | ZET_BRANCH=<branch> bash   (zet update then follows that branch)
 # After install:  zet (the server, the page in Chrome)   zet now (the board in the terminal)   zet update
@@ -20,7 +20,7 @@ step() { printf "${CB}│${CT}  [%-2s] %-69s ${CB}│${CR}\n" "$1" "$2"; }
 warn() { printf "${CB}│${CW}  %-75s${CB}│${CR}\n" "$1"; }
 
 echo -e "${CB}┌─────────────────────────────────────────────────────────────────────────────┐"
-printf "${CB}│${CH}  %-75s${CB}│\n" "MANTRA PRODUCTIONS - ZET STRIKE MONITOR (V9)"
+printf "${CB}│${CH}  %-75s${CB}│\n" "MANTRA PRODUCTIONS - ZET STRIKE MONITOR (V10)"
 printf "${CB}│${CT}  %-75s${CB}│\n" "from github.com/$REPO ($BRANCH)"
 echo -e "├─────────────────────────────────────────────────────────────────────────────┤${CR}"
 
@@ -81,10 +81,10 @@ python "$APP_DIR/zet.py" update timetable || warn "Timetable download failed, ze
 echo -e "${CB}├─────────────────────────────────────────────────────────────────────────────┤"
 step "OK" "Installation completed."
 echo -e "${CB}└─────────────────────────────────────────────────────────────────────────────┘${CR}"
-echo -e "\n${CS}ZET Strike V9 is ready.${CR}"
+echo -e "\n${CS}ZET Strike V10 is ready.${CR}"
 echo -e "${CT}The server, in Chrome:  ${CH}zet${CR}   (O A U R Q)"
 echo -e "${CT}What runs now:         ${CH}zet now${CR}"
 echo -e "${CT}Where to catch it:     ${CH}zet near${CR}"
 echo -e "${CT}Strike news:           ${CH}zet news${CR}"
-echo -e "${CT}Google Maps key:       ${CH}zet keys google${CR}"
+echo -e "${CT}Keys from a file:      ${CH}zet keys import FILE${CR}   (or in the page, Settings)"
 echo -e "${CT}Newest version:        ${CH}zet update${CR}\n"

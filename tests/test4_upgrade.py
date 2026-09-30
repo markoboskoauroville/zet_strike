@@ -24,7 +24,8 @@ r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "manifest.py"), 
 check("MANIFEST.json matches every file in app/", r.returncode == 0, r.stdout + r.stderr)
 with open(os.path.join(APP, "MANIFEST.json")) as f:
     manifest = json.load(f)
-check("MANIFEST says V9", manifest["version"] == 9)
+N = manifest["version"]
+check("MANIFEST carries the version core.py says", N >= 10)
 
 # ---------------------------------------------------------------- a phone on V6
 v6 = {}
@@ -92,13 +93,13 @@ try:
     res = json.loads(r.stdout.strip().splitlines()[-1])
 except Exception:
     res = {}
-check("the updater reports V6 -> V9, every file verified", res.get("changed") and res.get("current") == 6 and res.get("latest") == 9, (res, r.stderr[-400:]))
+check("the updater reports V6 -> V%d, every file verified" % N, res.get("changed") and res.get("current") == 6 and res.get("latest") == N, (res, r.stderr[-400:]))
 same = all(open(os.path.join(data, n), "rb").read() == open(os.path.join(APP, n), "rb").read() for n in manifest["files"] if n != "zs.py")
-check("every V9 file is in place, byte for byte", same)
+check("every new file is in place, byte for byte", same)
 check("zs.py, the bridge for installs from before the rename, is removed as migrate() intends", not os.path.exists(os.path.join(data, "zs.py")))
 with open(os.path.join(data, "VERSION.json")) as f:
     ver = json.load(f)
-check("VERSION.json remembers V9, the commit and the branch it came from", ver["version"] == 9 and ver["commit"] == SHA and ver["branch"] == BRANCH, ver)
+check("VERSION.json remembers the version, the commit and the branch it came from", ver["version"] == N and ver["commit"] == SHA and ver["branch"] == BRANCH, ver)
 backups = os.listdir(os.path.join(data, "backup"))
 check("the V6 files are kept in backup", len(backups) == 1 and open(os.path.join(data, "backup", backups[0], "app.py"), "rb").read() == v6["app.py"])
 check("the zet command is written", os.path.exists(os.path.join(home, "usr", "bin", "zet")))
@@ -127,7 +128,7 @@ try:
             got = json.loads(body)
             break
         time.sleep(0.2)
-    check("the upgraded folder serves V9", got and got["version"] == 9 and got["port"] == port, got)
+    check("the upgraded folder serves the new version", got and got["version"] == N and got["port"] == port, got)
     st_, body, _ = http("http://127.0.0.1:%d/api/settings" % port, headers={"X-ZET": "1"})
     s = json.loads(body or b"{}")
     check("and its settings carry the Google key section and the map choice", st_ == 200 and "google" in s and s.get("map") == "osm", s)
@@ -146,7 +147,7 @@ check("run again: already the newest, nothing changed", res.get("changed") is Fa
 # ---------------------------------------------------------------- the U key: V9 -> V10 while it runs
 # GitHub now has a V10 whose page differs by one line. U, then y: the files change, the server comes
 # back as the same process on the SAME port, and the open page keeps answering (ports.md §4, test 4).
-V10_MARK = b"<!-- V10 -->"
+V10_MARK = b"<!-- next -->"
 v10_html = open(os.path.join(APP, "index.html"), "rb").read() + V10_MARK
 v10_files = dict(manifest["files"], **{"index.html": hashlib.sha256(v10_html).hexdigest()})
 SHA10 = "a" * 40
@@ -157,7 +158,7 @@ def do_get_v10(self):
     if self.path == "/repos/markoboskoauroville/zet_strike/commits/" + BRANCH:
         body = SHA10.encode()
     elif self.path == "/markoboskoauroville/zet_strike/%s/app/MANIFEST.json" % SHA10:
-        body = json.dumps({"version": 10, "notes": "V10: one line", "files": v10_files}).encode()
+        body = json.dumps({"version": N + 1, "notes": "next: one line", "files": v10_files}).encode()
     elif self.path == "/markoboskoauroville/zet_strike/%s/app/index.html" % SHA10:
         body = v10_html
     elif self.path.startswith("/markoboskoauroville/zet_strike/%s/app/" % SHA10):
@@ -176,10 +177,10 @@ bindir, opened = fake_opener()
 port = free_port()
 con = Console(console_env(dict(env, PATH=bindir + os.pathsep + os.environ["PATH"], ZET_PORT=str(port))), folder=data)
 try:
-    check("V9 runs from the upgraded folder, with its console", con.wait_for(r"\[Q\] stop", 20), con.text()[-300:])
+    check("the new version runs from the upgraded folder, with its console", con.wait_for(r"\[Q\] stop", 20), con.text()[-300:])
     con.wait_for(r"opened in", 10)
     con.key("u")
-    check("U: installed and available, and a question", con.wait_for(r"press y to update", 20) and "V9 installed   ->   V10 available" in con.text(), con.text()[-400:])
+    check("U: installed and available, and a question", con.wait_for(r"press y to update", 20) and ("V%d installed   ->   V%d available" % (N, N + 1)) in con.text(), con.text()[-400:])
     con.buf = b""
     con.key("y")
     check("y: every file checked, then a restart", con.wait_for(r"restarting on the same port", 30), con.text()[-400:])
@@ -214,5 +215,30 @@ check("a V8 folder's timetable: one HEAD, matched by size, no download", len(fz.
       and len(fz.count("HEAD", "/static")) == 1 and idx["version"] == "000396", fz.log)
 check("and from then on ZET's headers are remembered", os.path.exists(core9.STATIC_META))
 fz.stop()
+
+# ---------------------------------------------------------------- a V9 Google key moves into the V10 list
+# V7-V9 kept one Google key in secrets/google_key and its test at the top of google_key.json. V10 keeps
+# a list with a key in use: the old key must arrive in use, with its test, and the old file must go.
+import hashlib as _h  # noqa: E402
+import stat as _stat  # noqa: E402
+
+fresh_home()
+d9 = os.environ["ZET_STRIKE_DIR"]
+os.makedirs(os.path.join(d9, "secrets"), mode=0o700)
+k9 = "AIza" + "M" * 35
+with open(os.path.join(d9, "secrets", "google_key"), "w") as f:
+    f.write(k9 + "\n")
+fp9 = _h.sha256(k9.encode()).hexdigest()[:10]
+with open(os.path.join(d9, "google_key.json"), "w") as f:
+    json.dump({"fp": fp9, "state": "works", "tiles": "works", "detail": "works for Tiles", "t": 1790000000}, f)
+for m in ("core", "net", "mapkey", "labels", "keyparse", "probes"):
+    sys.modules.pop(m, None)
+import mapkey as mk10  # noqa: E402
+st = mk10.status()
+check("the V9 key is the one in use, from this phone, with its old test", st["has_key"] and st["fp"] == fp9 and st["source"] == "this phone"
+      and st["tiles"] == "works" and len(st["keys"]) == 1 and st["keys"][0]["active"], st)
+check("the old single-key file is gone, the new list is 0600", not os.path.exists(os.path.join(d9, "secrets", "google_key"))
+      and _stat.S_IMODE(os.stat(mk10.KEYS_FILE).st_mode) == 0o600 and mk10.saved_keys() == [k9])
+check("and a second key added later does not take its place", mk10.add(["AIza" + "N" * 35])[0] and mk10.status()["fp"] == fp9)
 
 finish("test 4, the upgrade")

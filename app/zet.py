@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""zet - ZET Strike V9 terminal: what runs, where to catch it, what the lines are, and the strike news."""
+"""zet - ZET Strike V10 terminal: what runs, where to catch it, what the lines are, and the strike news."""
 import argparse
 import getpass
 import json
@@ -497,10 +497,37 @@ def cmd_google(rest):
     return 0 if r["tiles"] == "works" else 1
 
 
+def cmd_import(paths):
+    """zet keys import FILE...: every Gemini and Google key in the files, with their titles (labels.py)."""
+    import labels
+    if not paths:
+        print("  which file? zet keys import ~/storage/downloads/keys.txt")
+        return 1
+    code = 0
+    for p in paths:
+        p = os.path.expanduser(p)
+        try:
+            with open(p, "rb") as f:
+                raw = f.read(2 * 1024 * 1024)
+        except OSError as e:
+            print(WARN + "  %s: %s" % (p, e.strerror) + R)
+            code = 1
+            continue
+        if b"\x00" in raw[:4096]:
+            print(WARN + "  %s: not a text file, nothing read" % os.path.basename(p) + R)
+            continue
+        r = labels.import_text(raw.decode("utf-8", "replace"), os.path.basename(p))
+        print("  " + labels.summary(r))
+    print("  test them: zet keys test   and   zet keys google test")
+    return code
+
+
 def cmd_keys(idx, lines, cfg, args):
     sub = args.rest[0] if args.rest else "list"
     if sub == "google":
         return cmd_google(args.rest[1:])
+    if sub == "import":
+        return cmd_import(args.rest[1:])
     if sub == "add":
         text = getpass.getpass("  Paste Gemini key(s), the text stays hidden: ") if sys.stdin.isatty() else sys.stdin.read()
         r = news.add_keys(text)
@@ -527,11 +554,11 @@ def cmd_keys(idx, lines, cfg, args):
         f.row((" No keys yet. Add: zet keys add", T))
     for k in st["keys"]:
         col = {"ok": OK, "new": T, "cool": WARN, "dead": WARN}.get(k["state"], T)
-        f.row((" %s%s " % ("*" if k["active"] else " ", k["fp"]), H), (k["state"], col),
+        f.row((" %s%s " % ("*" if k["active"] else " ", k.get("label") or k["fp"]), H), (k["state"], col),
               ("  rest %ds" % k["rest"] if k["rest"] else "", WARN), ("  " + (k.get("last") or ""), DIM))
     f.sep()
     f.row((" * = in use. Keys are shown by fingerprint only.", DIM))
-    f.row((" zet keys add | test | del FINGERPRINT", DIM))
+    f.row((" zet keys add | test | del FINGERPRINT | import FILE...", DIM))
     try:
         import mapkey
         g = mapkey.status()
@@ -577,7 +604,7 @@ def cmd_day(idx, lines, cfg, args):
     return 0
 
 
-HELP = """zet, ZET Strike V9
+HELP = """zet, ZET Strike V10
 
   zet                 the server: map, near me, lines, news, log and settings in Chrome (O A U R Q)
   zet now             what runs now, with next stops, here in the terminal
@@ -592,6 +619,7 @@ HELP = """zet, ZET Strike V9
   zet watch           live board, refreshes every 20 s
   zet keys            Gemini keys (add, test, del)
   zet keys google     the Google Maps key (paste, test, del)
+  zet keys import F   every Gemini and Google key in files F..., with their titles
   zet day             every vehicle seen today
   zet data            what came over the network today (feed, timetable, news)
   zet update          newest version from GitHub; asks whether the timetable changed

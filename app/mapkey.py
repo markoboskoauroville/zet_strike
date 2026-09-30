@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""mapkey.py - ZET Strike V7: the Google Maps key, its test, and the Google map tiles.
+"""mapkey.py - ZET Strike: the Google Maps keys, their test, and the Google map tiles.
 
-ONE KEY PER JOB (keyring.md §2b): the map needs one Google key, so this holds one. It lives in
-~/.zet-strike/secrets/google_key, 0600, the folder 0700, and is shown only by fingerprint.
-Where a key is looked for, in order (keyring.md §11): ZET_GOOGLE_KEY in the environment, the 0600
-file, then `keyring get google` when the Keyring app is on the phone.
+ONE KEY IN USE PER JOB (keyring.md §2b), several kept (V10): each with a title, one chosen by a radio.
+They live in ~/.zet-strike/secrets/google_keys, 0600, the folder 0700, shown only by fingerprint and
+title. Where the key in use is looked for (keyring.md §11): ZET_GOOGLE_KEY in the environment, the
+keys on this phone, then `keyring get google` when the Keyring app is on the phone.
 
 THE TEST DOES WORK (keyring.md §2c, key-testing.md §6b). probes.google_probe asks Places (New),
 Map Tiles, Geocoding and Gemini each for the smallest thing it sells and reads the BODY, because
@@ -34,7 +34,7 @@ KEY_FILE = os.path.join(SECRET_DIR, "google_key")
 STATE_FILE = os.path.join(core.APP_DIR, "google_key.json")
 TILE_BASE = os.environ.get("ZET_TILE_BASE", "https://tile.googleapis.com")
 KEY_SHAPE = re.compile(r"AIza[0-9A-Za-z_\-]{35}")   # a Google Cloud key (Maps, Places, Tiles); never a Gemini key
-_lock = threading.Lock()
+_lock = threading.RLock()   # saved_keys() may migrate a V7-V9 file while add() holds it
 _session = {"token": None, "expiry": 0, "fp": None}
 
 
@@ -42,13 +42,58 @@ def fingerprint(key):
     return hashlib.sha256(key.encode()).hexdigest()[:10]
 
 
-# ---------------------------------------------------------------- where the key is
-def _from_file():
+# ---------------------------------------------------------------- where the keys are
+# V10: more than one Google key, each with a title (labels.py), one of them in use (a radio in the
+# page, keyring.md §6). secrets/google_keys holds them one per line, 0600; google_key.json holds which
+# one is in use and each one's last test, by fingerprint. V7-V9 kept one key in secrets/google_key:
+# it is moved into the list the first time it is read.
+KEYS_FILE = os.path.join(SECRET_DIR, "google_keys")
+
+
+def _write_secret(path, text):
+    os.makedirs(SECRET_DIR, exist_ok=True)
+    os.chmod(SECRET_DIR, 0o700)
+    tmp = path + ".part"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    os.chmod(path, 0o600)
+
+
+def _state():
+    st = core.load_json(STATE_FILE, {})
+    st = st if isinstance(st, dict) else {}
+    if "keys" not in st:                                  # the V7-V9 shape: one key's test at the top level
+        old = {k: st[k] for k in ("state", "detail", "tiles", "apis", "t") if k in st}
+        st = {"active": st.get("fp"), "keys": {st["fp"]: old} if st.get("fp") else {}}
+    return st
+
+
+def _save_state(st):
+    core.save_json(STATE_FILE, st, mode=0o600)
+
+
+def saved_keys():
+    """Every Google key on this phone, in the order added. Moves a V7-V9 single key file in."""
+    keys = []
+    try:
+        with open(KEYS_FILE, encoding="utf-8") as f:
+            keys = [k.strip() for k in f if k.strip()]
+    except OSError:
+        pass
     try:
         with open(KEY_FILE, encoding="utf-8") as f:
-            return f.read().strip() or None
+            legacy = f.read().strip()
     except OSError:
-        return None
+        legacy = ""
+    if legacy:
+        with _lock:
+            if legacy not in keys:
+                keys.insert(0, legacy)
+            _write_secret(KEYS_FILE, "".join(k + "\n" for k in keys))
+            os.remove(KEY_FILE)
+    return keys
 
 
 def _from_keyring():
@@ -65,13 +110,17 @@ def _from_keyring():
 
 
 def current():
-    """(key, source) or (None, None)."""
+    """(key, source) or (None, None): the environment, the key in use on this phone, the Keyring app."""
     k = os.environ.get("ZET_GOOGLE_KEY", "").strip()
     if k:
         return k, "environment"
-    k = _from_file()
-    if k:
-        return k, "this phone"
+    keys = saved_keys()
+    if keys:
+        active = _state().get("active")
+        for key in keys:
+            if fingerprint(key) == active:
+                return key, "this phone"
+        return keys[0], "this phone"
     k = _from_keyring()
     if k:
         return k, "Keyring app"
@@ -87,59 +136,110 @@ def extract(text):
     return pieces[0] if len(pieces) == 1 else None
 
 
-def save(text):
-    key = extract(text)
-    if not key:
+def add(values):
+    """Add keys (values, already found by the parser). Returns (added fingerprints, duplicates).
+    The first key on a phone that had none is the one in use."""
+    with _lock:
+        keys = saved_keys()
+        added = [v for v in dict.fromkeys(values) if v and v not in keys]
+        if added:
+            _write_secret(KEYS_FILE, "".join(k + "\n" for k in keys + added))
+            st = _state()
+            for v in added:
+                st["keys"].setdefault(fingerprint(v), {"state": "new", "t": time.time()})
+            if not st.get("active") or st["active"] not in {fingerprint(k) for k in keys + added}:
+                st["active"] = fingerprint((keys + added)[0])
+            _save_state(st)
+            _session.update(token=None, expiry=0, fp=None)
+    for v in added:
+        core.log_event("key", "Google Maps key %s saved" % fingerprint(v))
+    return [fingerprint(v) for v in added], len(values) - len(added)
+
+
+def save(text, label=""):
+    """The paste box: every Google key in the text by the Keyring parser (with its title), or one lone
+    token when the text is only that."""
+    import labels
+    got = labels.parse_for(text, "pasted", ("google",))
+    if not got:
+        key = extract(text)
+        got = [(key, label)] if key else []
+    if not got:
         return {"error": "No Google key found in what was pasted. A Google Maps key begins AIza."}
-    with _lock:
-        os.makedirs(SECRET_DIR, exist_ok=True)
-        os.chmod(SECRET_DIR, 0o700)
-        tmp = KEY_FILE + ".part"
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(key + "\n")
-        os.replace(tmp, KEY_FILE)
-        os.chmod(KEY_FILE, 0o600)
-        core.save_json(STATE_FILE, {"fp": fingerprint(key), "state": "new", "t": time.time()}, mode=0o600)
-        _session.update(token=None, expiry=0, fp=None)
-    core.log_event("key", "Google Maps key %s saved" % fingerprint(key))
-    return {"saved": True, "fp": fingerprint(key)}
+    fps, dups = add([v for v, _l in got])
+    for v, l in got:
+        if l or label:
+            labels.set(fingerprint(v), l or label)
+    return {"saved": True, "fp": fingerprint(got[0][0]), "added": len(fps), "duplicates": dups}
 
 
-def delete():
+def select(fp):
     with _lock:
-        had = os.path.exists(KEY_FILE)
-        for p in (KEY_FILE, STATE_FILE):
-            try:
-                os.remove(p)
-            except OSError:
-                pass
+        if fp not in {fingerprint(k) for k in saved_keys()}:
+            return False
+        st = _state()
+        st["active"] = fp
+        _save_state(st)
         _session.update(token=None, expiry=0, fp=None)
-    if had:
-        core.log_event("key", "Google Maps key deleted")
-    return had
+    core.log_event("key", "Google Maps key %s is now the one in use" % fp)
+    return True
+
+
+def delete(fp=None):
+    """Delete one key (the one in use when no fingerprint is given)."""
+    import labels
+    with _lock:
+        keys = saved_keys()
+        if fp is None:
+            st = _state()
+            fp = st.get("active") or (fingerprint(keys[0]) if keys else None)
+        keep = [k for k in keys if fingerprint(k) != fp]
+        if len(keep) == len(keys):
+            return False
+        _write_secret(KEYS_FILE, "".join(k + "\n" for k in keep))
+        st = _state()
+        st["keys"].pop(fp, None)
+        if st.get("active") == fp:
+            st["active"] = fingerprint(keep[0]) if keep else None
+        _save_state(st)
+        _session.update(token=None, expiry=0, fp=None)
+    labels.forget(fp)
+    core.log_event("key", "Google Maps key %s deleted" % fp)
+    return True
 
 
 def status():
-    """Fingerprint, where it came from, and the last test. Never the key."""
+    """The key in use (fingerprint, where it came from, its last test) and every saved key. Never a key."""
+    import labels
     key, source = current()
-    st = core.load_json(STATE_FILE, {})
-    st = st if isinstance(st, dict) else {}
+    st = _state()
+    rows = []
+    for k in saved_keys():
+        fp = fingerprint(k)
+        t = st["keys"].get(fp, {})
+        rows.append({"fp": fp, "label": labels.get(fp), "state": t.get("state", "new"), "tiles": t.get("tiles"),
+                     "detail": t.get("detail"), "apis": t.get("apis"), "t": t.get("t"),
+                     "active": bool(key) and source == "this phone" and fp == fingerprint(key)})
     if not key:
-        return {"has_key": False, "fp": None, "source": None, "state": None, "detail": None, "tiles": None, "t": None}
+        return {"has_key": False, "fp": None, "source": None, "state": None, "detail": None, "tiles": None, "t": None,
+                "label": "", "keys": rows}
     fp = fingerprint(key)
-    if st.get("fp") != fp:
-        st = {}
-    return {"has_key": True, "fp": fp, "source": source, "state": st.get("state", "new"),
-            "detail": st.get("detail"), "tiles": st.get("tiles"), "apis": st.get("apis"), "t": st.get("t")}
+    t = st["keys"].get(fp, {})
+    return {"has_key": True, "fp": fp, "source": source, "label": labels.get(fp), "state": t.get("state", "new"),
+            "detail": t.get("detail"), "tiles": t.get("tiles"), "apis": t.get("apis"), "t": t.get("t"), "keys": rows}
 
 
 # ---------------------------------------------------------------- the test
-def test():
-    """The work probe, every Google API asked; the map's own verdict is the Tiles line."""
+def test(fp=None):
+    """The work probe, every Google API asked; the map's own verdict is the Tiles line.
+    fp: a saved key to test; none, the key in use."""
     key, _source = current()
+    if fp:
+        key = next((k for k in saved_keys() if fingerprint(k) == fp), None)
+        if not key:
+            return {"error": "No saved Google key with fingerprint %s." % fp}
     if not key:
-        return {"error": "No Google Maps key yet. Paste one in Settings, or run: zet keys google"}
+        return {"error": "No Google Maps key yet. Choose a key file or paste one in Settings, or run: zet keys google"}
     r = probes.google_probe(key)
     apis = [{"api": n, "state": s, "why": w, "status": c} for n, s, w, c in r.get("apis", [])]
     tiles = next((a for a in apis if a["api"] == "Tiles"), None)
@@ -161,7 +261,9 @@ def test():
     out = {"fp": fingerprint(key), "state": r["state"], "detail": r["detail"], "tiles": tiles_state,
            "map_says": map_says, "apis": apis, "t": time.time()}
     with _lock:
-        core.save_json(STATE_FILE, {k: out[k] for k in ("fp", "state", "detail", "tiles", "apis", "t")}, mode=0o600)
+        st = _state()
+        st["keys"][out["fp"]] = {k: out[k] for k in ("state", "detail", "tiles", "apis", "t")}
+        _save_state(st)
         if tiles_state != "works":
             _session.update(token=None, expiry=0, fp=None)
     core.log_event("key", "Google Maps key %s tested: %s; map tiles %s" % (out["fp"], r["state"], tiles_state))

@@ -1,6 +1,6 @@
 # ZET Strike: handover
 
-    version      V9 (30.9.2026)
+    version      V10 (30.9.2026)
     repository   markoboskoauroville/zet_strike (public)
     command      zet (the server; zet map is the same), zet now (the board in the terminal)
     port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
@@ -17,6 +17,29 @@
 
 Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
 (the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## V10 (30.9.2026): keys from files, with titles
+
+Marko, 30.9.2026: *"Please upgrade that so it has a file picker for the keys and read how to parse
+the files. It can have multiple keys and each key can have title. Where is it coming from? Read the
+Mantra Manifest. Never in any future app you build API keys without file pickers. That's the
+mandatory thing, always."*
+
+- **Choose key files…** at the top of Settings, and **File…** beside both paste boxes: the phone's
+  file dialog, several files at once, sent to `/api/keys/import` (2 MB a file; a picture is refused
+  as "not a text file").
+- **The parser is the Keyring's** (`app/keyparse.py`, KEYRING_TERMUX `ring.py`, keyring.md §4, §10d):
+  the keyring v1 format first, then blocks split on blank lines, the key by shape and the title by
+  elimination. `AQ.` goes to Gemini, `AIza` to Google Maps; other providers are counted, not kept.
+- **Titles** (`app/labels.py`): kept by fingerprint in `secrets/key_labels.json`, 0600; Rename in
+  the page. A title can never hold a key: the words beside a key on its own line are the title.
+- **Google keys: several**, one in use by a radio (keyring.md §6), each with its own Test and
+  Delete. The V7-V9 single key file is moved into the list, in use, with its last test.
+- `zet keys import FILE...` does the same from Termux.
+
+**Found by the tests, and it must go back to KEYRING_TERMUX:** its `_label_from` took a line that
+holds the key (`google AIza...`) whole as the title, so the key was stored and shown as its own
+name. Fixed here (`keyparse.py`); the source still has it, and this session cannot push there.
 
 ## V9 (30.9.2026): mobile data
 

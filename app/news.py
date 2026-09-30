@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/python
-"""news.py - ZET Strike V9 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
+"""news.py - ZET Strike V10 news desk: Croatian headlines (RSS, free) plus a Gemini summary and timeline.
 
 Gemini keys follow MANTRA_MANIFEST quota-and-fallback: four verdicts (ok, dead, cool, soft), one classifier
 that reads status AND body AND headers, each key tried at most once per call, resume at the last good key,
@@ -212,19 +212,34 @@ def extract_keys(text):
     return out
 
 
-def add_keys(text):
-    new = extract_keys(text)
+def add_values(values):
+    """Add Gemini keys already found by the parser. Returns (added fingerprints, duplicates)."""
     with _ring_lock:
         keys = _read_keys()
-        added = [k for k in new if k not in keys]
-        _write_keys(keys + added)
-        ring = _load_ring()
-        for k in added:
-            ring["keys"][fingerprint(k)] = {"state": "new", "added": time.time()}
-        _save_ring(ring)
+        added = [k for k in dict.fromkeys(values) if k and k not in keys]
+        if added:
+            _write_keys(keys + added)
+            ring = _load_ring()
+            for k in added:
+                ring["keys"][fingerprint(k)] = {"state": "new", "added": time.time()}
+            _save_ring(ring)
     for k in added:
         core.log_event("key", "Gemini key %s added" % fingerprint(k))
-    return {"found": len(new), "added": len(added), "duplicates": len(new) - len(added)}
+    return [fingerprint(k) for k in added], len(values) - len(added)
+
+
+def add_keys(text, title=""):
+    """The paste box and `zet keys add`: KEYRING_TERMUX's parser (labels.parse_for) takes every AQ. key
+    with the title its block carries; a lone token of another shape pasted on its own is still taken."""
+    import labels
+    got = labels.parse_for(text, "pasted", ("gemini",))
+    if not got:
+        got = [(k, "") for k in extract_keys(text)]
+    fps, dups = add_values([v for v, _t in got])
+    for v, t in got:
+        if t or title:
+            labels.set(fingerprint(v), t or title)
+    return {"found": len(got), "added": len(fps), "duplicates": dups}
 
 
 def remove_key(fp):
@@ -239,6 +254,8 @@ def remove_key(fp):
         if ring.get("active") == fp:
             ring["active"] = None
         _save_ring(ring)
+    import labels
+    labels.forget(fp)
     core.log_event("key", "Gemini key %s deleted" % fp)
     return True
 
@@ -259,9 +276,11 @@ def _save_ring(r):
 
 def ring_status():
     """What the settings screen shows: fingerprints and states only."""
+    import labels
     with _ring_lock:
         keys = _read_keys()
         ring = _load_ring()
+    titles = labels._all()
     now = time.time()
     out = []
     for k in keys:
@@ -270,6 +289,7 @@ def ring_status():
         if st.get("state") == "cool" and st.get("until", 0) <= now:
             st["state"] = "ok" if st.get("last_ok") else "new"
         st["fp"] = fp
+        st["label"] = titles.get(fp, "")
         st["active"] = ring.get("active") == fp
         st["rest"] = max(0, int(st.get("until", 0) - now)) if st.get("state") == "cool" else 0
         out.append(st)
