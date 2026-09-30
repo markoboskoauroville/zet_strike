@@ -1,0 +1,12 @@
+{
+  "version": 6,
+  "notes": "V6: catch planner (zs near), line catalog, strike news with Gemini digest and key ring, event log, GitHub self update.",
+  "files": {
+    "app.py": "0960a8a1b2919ea6cee0d2dca166fa92a4c679800e83966356fdb596d840e3cf",
+    "core.py": "139bea412b998cd6bf1c9290ebbff533a0912b7784fae5499f8832b5c86f2650",
+    "index.html": "c23ed2a3fa2e731f11077a6acd0b172e003dbac87faf4fe7207c513ce26e1446",
+    "news.py": "177a31d51a0c410ae0051ff61ec0d5991ee6b4d2b581341974b6a6d8c1b0999b",
+    "update.py": "01fe01553d61ab378965c72069cf9d01f0cca0707c9351cfd950bc4645b597e7",
+    "zs.py": "475bccc624a94cd403be59476e4cfedcaea8873c56697c057d35267dbbae8e58"
+  }
+}
