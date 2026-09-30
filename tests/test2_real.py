@@ -28,7 +28,7 @@ try:
     check("the banner comes up", con.wait_for(r"\[Q\] stop", 20), con.text()[-600:])
     t = con.text()
     check("MA READER's shape: name, where, library, version", all(s in t for s in (
-        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V10")), t[-600:])
+        "ZET STRIKE  server", "on this phone  http://127.0.0.1:%d" % port, "library        ~/.zet-strike", "version        V11")), t[-600:])
     check("the five keys, one per line", all(s in t for s in (
         "[O] open in Chrome", "[A] open in the default browser", "[U] update the app", "[R] restart", "[Q] stop")))
     check("plain lines, never a box", not any(ch in t for ch in "┌┐└┘│"))
@@ -48,7 +48,7 @@ try:
     check("no vehicle and the feed unreachable: the API still answers, with the reason", st == 200 and live.get("vehicles") == [] and "feed" in (live.get("error") or ""), live)
     st, body, _ = http(base + "/api/settings", headers=H)
     s = json.loads(body or b"{}")
-    check("settings answer: the port bound, V10, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 10
+    check("settings answer: the port bound, V11, the Google key by fingerprint only", st == 200 and s["port"] == port and s["version"] == 11
           and s["google"]["has_key"] and s["google"]["source"] == "environment" and key not in body.decode())
 
     st, img, hdr = http(base + s["google_tiles"].replace("{z}", "3").replace("{x}", "4").replace("{y}", "2"))
@@ -90,7 +90,7 @@ try:
         check("in Chromium at 390 px: no script error, nothing wider than the phone", not out.get("errs") and out.get("width") == 390, out)
         check("the settings show the Google key by fingerprint, Test live, Google choosable", out.get("gfp") == s["google"]["fp"]
               and out.get("gtest") is False and out.get("google") is False, out)
-        check("the version sits at the foot of settings", out.get("ver") == "V10")
+        check("the version sits at the foot of settings", out.get("ver") == "V11")
     else:
         skipped("the page in Chromium", "no node or playwright here")
 
@@ -192,6 +192,103 @@ if node and os.path.isdir(pw):
         srv.wait(5)
 else:
     skipped("the file picker in Chromium", "no node or playwright here")
+
+# ---------------------------------------------------------------- the map tiles, and the pinch (V11)
+# OpenStreetMap answered the phone's own tile requests "403 Access blocked" (30.9.2026). Tiles now come
+# through the server, which names itself; a stand-in tile server writes down who asked and how often.
+import struct as _st  # noqa: E402
+import zlib as _z  # noqa: E402
+from http.server import BaseHTTPRequestHandler as _B, ThreadingHTTPServer as _S  # noqa: E402
+import threading as _th  # noqa: E402
+
+def _png(rgb):
+    raw = b"".join(b"\x00" + bytes(rgb) * 256 for _ in range(256))
+    ch = lambda t, d: _st.pack(">I", len(d)) + t + d + _st.pack(">I", _z.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + ch(b"IHDR", _st.pack(">IIBBBBB", 256, 256, 8, 2, 0, 0, 0)) + ch(b"IDAT", _z.compress(raw)) + ch(b"IEND", b"")
+TILE_PNG = _png((236, 232, 222))
+tile_log = []
+class _T(_B):
+    def log_message(self, *a):
+        pass
+    def do_GET(self):
+        tile_log.append((self.path, self.headers.get("User-Agent") or "", self.headers.get("Referer")))
+        self.send_response(200); self.send_header("Content-Type", "image/png"); self.send_header("Content-Length", str(len(TILE_PNG)))
+        self.end_headers(); self.wfile.write(TILE_PNG)
+_ts = _S(("127.0.0.1", 0), _T)
+_th.Thread(target=_ts.serve_forever, daemon=True).start()
+_tb = "http://127.0.0.1:%d" % _ts.server_address[1]
+fresh_home()
+port5 = free_port()
+envt = dict(os.environ, ZET_PORT=str(port5), ZET_NO_CONSOLE="1", ZET_NO_BROWSER="1", ZET_POLL="3600",
+            ZET_FEED_URL="http://127.0.0.1:9/x", ZET_STATIC_URL="http://127.0.0.1:9/x",
+            ZET_TILE_OSM=_tb + "/osm/{z}/{x}/{y}.png", ZET_TILE_ESRI=_tb + "/sat/{z}/{y}/{x}")
+srv = subprocess.Popen([sys.executable, os.path.join(APP, "app.py")], env=envt, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    import time as _t
+    for _ in range(60):
+        if http("http://127.0.0.1:%d/health" % port5, 1)[0] == 200:
+            break
+        _t.sleep(0.2)
+    st, body, _ = http("http://127.0.0.1:%d/api/settings" % port5, headers={"X-ZET": "1"})
+    tu = json.loads(body)["tile_urls"]
+    url = "http://127.0.0.1:%d" % port5 + tu["osm"].replace("{z}", "13").replace("{x}", "4458").replace("{y}", "2905")
+    st1, b1, h1 = http(url)
+    st2, b2, _ = http(url)
+    check("an OpenStreetMap tile comes through the server, as an image", st1 == 200 and b1 == TILE_PNG and h1.get("Content-Type", "").startswith("image/"), (st1, h1))
+    check("asked with a User-Agent that names the app, as OSM's policy asks", tile_log and tile_log[0][1].startswith("ZETStrike/") and "github.com/markoboskoauroville/zet_strike" in tile_log[0][1], tile_log[:1])
+    check("the same tile again: from the phone, OSM is not asked twice", st2 == 200 and b2 == TILE_PNG and len(tile_log) == 1, tile_log)
+    st3, _, _ = http("http://127.0.0.1:%d" % port5 + tu["esri"].replace("{z}", "13").replace("{x}", "4458").replace("{y}", "2905"))
+    check("satellite without a Google key: Esri's imagery, y before x in its address", st3 == 200 and tile_log[-1][0] == "/sat/13/2905/4458", tile_log[-1:])
+    st4, _, _ = http("http://127.0.0.1:%d/tile/osm/13/4458/2905?t=wrong" % port5)
+    check("without the page's token no tile is fetched for anybody", st4 == 404 and len(tile_log) == 2)
+    if node and os.path.isdir(pw):
+        js = tempfile.mktemp(suffix=".js")
+        with open(js, "w") as f:
+            f.write("""const {chromium} = require(%r);
+(async () => { const b = await chromium.launch(); const ctx = await b.newContext({viewport:{width:390,height:844}, hasTouch:true, isMobile:true});
+ const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+ await p.goto('http://127.0.0.1:%d/'); await p.waitForTimeout(2500);
+ const tilesShown = await p.$$eval('.leaflet-layer.base img.leaflet-tile-loaded', els => els.length);
+ const cdp = await ctx.newCDPSession(p);
+ const tp = (type, pts) => cdp.send('Input.dispatchTouchEvent', {type, touchPoints: pts});
+ const pinch = async (grow) => { await tp('touchStart', [{x:195,y:420,id:1},{x:195,y:480,id:2}]);
+   for (let i=1;i<=3;i++) await tp('touchMove', [{x:195,y:420-(grow?i*5:-i*5),id:1},{x:195,y:480+(grow?i*5:-i*5),id:2}]);
+   await tp('touchEnd', []); await p.waitForTimeout(300); };
+ await pinch(true);                                      // on the map: the map zooms, the text does not
+ const onMap = await p.evaluate(() => document.documentElement.style.fontSize);
+ await p.click('#tabs button[data-v="lines"]'); await p.waitForTimeout(500);
+ const tabBefore = await p.evaluate(() => getComputedStyle(document.querySelector('#tabs button')).fontSize);
+ await pinch(true);
+ const bigger = await p.evaluate(() => document.documentElement.style.fontSize);
+ const tabAfter = await p.evaluate(() => getComputedStyle(document.querySelector('#tabs button')).fontSize);
+ await pinch(false); await pinch(false);
+ const smaller = await p.evaluate(() => document.documentElement.style.fontSize);
+ const kept = await p.evaluate(() => localStorage.getItem('zet.scale'));
+ await p.reload(); await p.waitForTimeout(800);
+ const afterReload = await p.evaluate(() => document.documentElement.style.fontSize);
+ await p.click('#b-sat'); await p.waitForTimeout(1200);
+ const satShown = await p.$$eval('.leaflet-layer.sat img.leaflet-tile-loaded', els => els.length);
+ console.log(JSON.stringify({errs, tilesShown, onMap, bigger, smaller, kept, afterReload, tabBefore, tabAfter, satShown}));
+ await b.close(); })();""" % (pw, port5))
+        r = subprocess.run([node, js], capture_output=True, text=True, timeout=120)
+        try:
+            out = json.loads(r.stdout.strip().splitlines()[-1])
+        except Exception:
+            out = {"errs": [r.stderr[-400:]]}
+        px = lambda v: float(str(v or "16px").replace("px", "") or 16)
+        check("the map shows tiles in the browser", out.get("tilesShown", 0) > 0 and not out.get("errs"), out)
+        check("two fingers on the map zoom the map, not the text", px(out.get("onMap")) == 16, out.get("onMap"))
+        check("two fingers apart on a page: the text grows", px(out.get("bigger")) > 16, out.get("bigger"))
+        check("the bars do not grow with it", out.get("tabBefore") == out.get("tabAfter"), (out.get("tabBefore"), out.get("tabAfter")))
+        check("two fingers together: the text shrinks, so more fits", px(out.get("smaller")) < px(out.get("bigger")), out)
+        check("the size is kept on the phone, and comes back after a reload", out.get("kept") and px(out.get("afterReload")) == px(out.get("smaller")), out)
+        check("Satellite lays imagery over the map", out.get("satShown", 0) > 0, out)
+    else:
+        skipped("the pinch and the tiles in Chromium", "no node or playwright here")
+finally:
+    srv.terminate()
+    srv.wait(5)
+    _ts.shutdown()
 
 # ---------------------------------------------------------------- traffic: the real server against a stand-in ZET
 # Every request ZET would see is written down by the stand-in, so what is measured is traffic, not intent.

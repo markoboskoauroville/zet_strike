@@ -1,22 +1,23 @@
 {
-  "version": 10,
-  "notes": "V10: keys from files. Choose key files (the phone's file dialog, several at once) and File beside each paste box; the Keyring parser (KEYRING_TERMUX ring.py) finds every Gemini (AQ.) and Google Maps (AIza) key by shape and its title by elimination; titles on every key, Rename; several Google keys, a radio for the one in use; zet keys import FILE. V9: mobile data. V8: zet alone is the server.",
+  "version": 11,
+  "notes": "V11: the Day Commute look (its palette, pills, compact rows, the clock in the top bar); pinch to size the text, kept on the phone; map tiles through the app (OpenStreetMap refused the page: 403 Access blocked), kept on the phone 30 days; Satellite as a switch over the map (Google with a working key, Esri otherwise). V10: keys from files.",
   "files": {
-    "app.py": "c8a282c4a0d52d4f4473e3dee5ef42609b87bbf886ee685d555de3e1fbd5ab7f",
+    "app.py": "820c880fb0a953384b3ffa8c361370b59a5ed06cd7985ac89c22a625e9a64882",
     "console.py": "095421a3ae8f495674b13daf04163e36e3876e8c8804f4cfa57215ec359b0363",
-    "core.py": "0abfa625017bd6a7935003f25f9ec8189845f095f1848d5877bac12854b870be",
-    "index.html": "fe43e523c9057870dd25247b43eaaf29f42289c3cf0d03cd31c929ae31329ea7",
+    "core.py": "647cff41c834032086db80b91ba37cf923496bf1a663faea3f4e26dbbd8c5620",
+    "index.html": "bc079e077029975151862790a3bd7ffba78b3be79652c27c1c890bbfda8195d7",
     "keyparse.py": "583ff5c0fe93923369be3213c8591a63ffea58b43fafbac9ad466f95f2f394de",
     "labels.py": "a7707a18f26c0acc7ba8139df70ffe234686eaecf17e664b5608732fd56cc7b7",
     "localguard.py": "d681a09cecbd2b3dce0bcd016983e2473b513d70909b21c3c018ab081f6bb6fa",
-    "mapkey.py": "99fd2babbc0a11e8e8fe5f3620e8ad537370002fcd1bf9753bcbdc1f1ae0faa1",
+    "mapkey.py": "e2cf49f801c4497e7f35c242815f6f87ff800cc43be1e527d9066c25e2a453c8",
     "net.py": "76b7158e2531154f6d9ecf7c5f2627d6024412059c4a0941812b1591bf7b6233",
     "news.py": "194f16e350fb51b5da6caf1790b06c78eebe08e9aea5f5efe667c0ce5d4ae096",
     "portpick.py": "bff780b5519fd21bb7e2405f0900f84407c00c7f2cf153ef0927acc522891625",
     "probes.py": "d06712fa44fc1fb7199870274f2745e19e5b841d23015b2b50204f38abce6bc2",
+    "tiles.py": "2df9decf30a74aadfa983513a563c7a2877ce1ccb394629015fb1b378c5bb7a9",
     "update.py": "3ff51ffa42e9fd382fe1bcddd00872978470e13c874d875ddcd31ccee5e9eb0e",
     "vendor.py": "63f7455dcadb17ab09c4426759002bc85a01d85500b88cc714956b742e0b8a86",
-    "zet.py": "1b86501f418084317a3928bd58f7518faa5c8ccbda83880a432a4250d928c0b4",
+    "zet.py": "be5972088d3714e31aa8b0e8b275de1475a14439d047e8eadb914821910130a6",
     "zs.py": "870d0bfbefb7a4e9aaa41863fd2fb5618c344ce32e094aba391196bdc8fa4fb7"
   }
 }

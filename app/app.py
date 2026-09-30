@@ -230,15 +230,18 @@ def vendor_file(name):
     return Response(data, mimetype=vendor.TYPES[name], headers={"Cache-Control": "max-age=604800"})
 
 
-@app.route("/tile/google/<int:z>/<int:x>/<int:y>")
-def tile(z, x, y):
-    """Google map tiles through this server, so the key never reaches the page (mapkey.py)."""
-    if request.args.get("t") != TILE_TOKEN or not (0 <= z <= 22 and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
+@app.route("/tile/<src>/<int:z>/<int:x>/<int:y>")
+def tile(src, z, x, y):
+    """Every map tile through this server (tiles.py): OpenStreetMap and Esri with a User-Agent that
+    names the app (OSM refused the page's own requests, V10), Google with the key kept here; each
+    kept on the phone for 30 days. The page's per-run token keeps other sites from using it."""
+    if request.args.get("t") != TILE_TOKEN:
         return Response(b"", status=404)
-    code, data, ctype = mapkey.tile(z, x, y)
+    import tiles
+    code, data, ctype, _how = tiles.get(src, z, x, y)
     if code != 200:
         return Response(data, status=code, mimetype="text/plain")
-    return Response(data, mimetype=ctype, headers={"Cache-Control": "private, max-age=86400"})
+    return Response(data, mimetype=ctype, headers={"Cache-Control": "private, max-age=604800"})
 
 
 @app.route("/api/live")
@@ -392,6 +395,7 @@ def api_settings():
     out["ring"] = news.ring_status()
     out["google"] = mapkey.status()
     out["google_tiles"] = "/tile/google/{z}/{x}/{y}?t=" + TILE_TOKEN
+    out["tile_urls"] = {s: "/tile/%s/{z}/{x}/{y}?t=%s" % (s, TILE_TOKEN) for s in ("osm", "esri", "google", "googlesat")}
     out["version"] = core.VERSION
     out["port"] = LIVE_PORT
     return jsonify(out)

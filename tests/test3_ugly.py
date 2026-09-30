@@ -50,17 +50,17 @@ J = dict(H, **{"Content-Type": "application/json"})
 url = "/tile/google/2/1/1?t=" + appmod.TILE_TOKEN
 check("a tile without the page's token is not served", c.get("/tile/google/2/1/1", headers={"Host": H["Host"]}).status_code == 404)
 check("a tile outside the world is not asked of Google", c.get("/tile/google/2/9/1?t=" + appmod.TILE_TOKEN, headers={"Host": H["Host"]}).status_code == 404)
-r = c.get(url, headers={"Host": H["Host"]})
+r = c.get(url.replace("2/1/1", "2/1/1"), headers={"Host": H["Host"]})   # a new tile each time: V11 keeps tiles
 check("a tile is served", r.status_code == 200 and r.data.startswith(b"\x89PNG"))
 tiles.expire_next = True
 before = tiles.sessions
-r = c.get(url, headers={"Host": H["Host"]})
+r = c.get(url.replace("2/1/1", "2/1/2"), headers={"Host": H["Host"]})   # a new tile each time: V11 keeps tiles
 check("a Google session that ended mid-map: a new one is made and the tile still comes", r.status_code == 200 and tiles.sessions == before + 1, (r.status_code, tiles.sessions))
 
 os.environ["ZET_GOOGLE_KEY"] = "AIza" + "x" * 10          # the wrong key: Google (the fake) refuses the session
 import mapkey  # noqa: E402
 mapkey._session.update(token=None, expiry=0, fp=None)
-r = c.get(url, headers={"Host": H["Host"]})
+r = c.get(url.replace("2/1/1", "2/1/3"), headers={"Host": H["Host"]})   # a new tile each time: V11 keeps tiles
 check("a key Google refuses: the tile answers 502 with why, never a broken image", r.status_code == 502 and b"refused" in r.data, (r.status_code, r.data[:80]))
 del os.environ["ZET_GOOGLE_KEY"]
 

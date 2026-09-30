@@ -1,91 +1,157 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0d0c0a">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
 <title>ZET Strike</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/vendor/leaflet.css">
 <style>
-:root{--ink:#0d0c0a;--panel:#1a1813;--raise:#242118;--line:#3a342a;--amber:#ffaf00;--gold:#ffd75f;--text:#ece6d8;--dim:#a39b8b;--alert:#ff8700;--you:#7fd3ff;--ok:#b5e07a}
+:root{
+  /* the Day Commute palette (MAHA_COMMUTE bus.html, v13), taken whole */
+  --bg:#0d1117;--card:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--faint:#5a626c;
+  --gold:#d4a017;--sea:#1f9bd1;--green:#3fb950;--live:#e3b341;--late:#f85149;--you:#58c4f5;
+  /* the names the page's script still writes into its HTML */
+  --ink:var(--bg);--panel:var(--card);--raise:var(--card);--line:var(--border);--amber:var(--gold);
+  --dim:var(--muted);--alert:var(--late);--ok:var(--green);
+  --top:58px;--tabh:48px}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--ink);color:var(--text);font:18px/1.45 Roboto,"Segoe UI",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,system-ui,Roboto,sans-serif;line-height:1.4}
 button,input,select{font:inherit;color:inherit}
 a{color:var(--gold)}
-#top{position:fixed;left:0;right:0;top:0;z-index:1000;background:var(--ink);border-bottom:2px solid var(--amber);padding:calc(env(safe-area-inset-top,0px) + 8px) 14px 8px;display:flex;align-items:baseline;gap:12px}
-#top h1{margin:0;font-size:21px;color:var(--amber);letter-spacing:.02em}
-#status{color:var(--dim);font-size:15px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#status b{color:var(--gold)}
-#tabs{position:fixed;left:0;right:0;bottom:0;z-index:1000;display:grid;grid-template-columns:repeat(6,1fr);background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
-#tabs button{background:none;border:0;padding:14px 0 12px;font-size:15px;color:var(--dim);border-top:3px solid transparent}
-#tabs button.on{color:var(--amber);border-top-color:var(--amber);font-weight:700}
-.view{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 48px);bottom:calc(env(safe-area-inset-bottom,0px) + 52px);overflow-y:auto;display:none;padding:14px 14px 40px}
+
+/* the top bar: name and clock, the state of the feed under them, like Commute's tophud.
+   The bars and the map keys are in px: the pinch sizes the CONTENT, and the frame stays put. */
+#top{position:fixed;left:0;right:0;top:0;z-index:1000;height:calc(env(safe-area-inset-top,0px) + var(--top));
+  background:var(--bg);border-bottom:1px solid var(--border);padding:calc(env(safe-area-inset-top,0px) + 6px) 14px 5px;
+  display:grid;grid-template-columns:1fr auto;align-items:baseline;column-gap:.6rem}
+#top h1{margin:0;font-size:16px;font-weight:800;letter-spacing:.06em;color:var(--gold);text-transform:uppercase}
+#clock{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.5px;line-height:1.05}
+#status{grid-column:1 / -1;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#status b{color:var(--green);font-weight:700}
+
+/* the tabs: quiet words, the one in force gold */
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:1000;display:grid;grid-template-columns:repeat(6,1fr);
+  background:var(--bg);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0px)}
+#tabs button{background:none;border:0;height:var(--tabh);font-size:13px;font-weight:600;color:var(--muted);
+  border-top:2px solid transparent;letter-spacing:.02em}
+#tabs button.on{color:var(--gold);border-top-color:var(--gold)}
+
+.view{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + var(--top));
+  bottom:calc(env(safe-area-inset-bottom,0px) + var(--tabh));overflow-y:auto;display:none;padding:.8rem .9rem 2.5rem;
+  touch-action:pan-y}
 .view.on{display:block}
-#v-map{padding:0}
-#map{position:absolute;inset:0}
-.mapbtns{position:absolute;right:10px;top:10px;z-index:900;display:flex;flex-direction:column;gap:8px}
-.btn{background:var(--amber);color:#1a1200;border:0;border-radius:6px;padding:11px 15px;font-weight:700;font-size:17px}
-.btn.ghost{background:var(--raise);color:var(--text);border:1px solid var(--line)}
-.btn:disabled{opacity:.5}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
-input[type=text],input[type=password],input[type=number],select{background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:11px 12px;min-width:0;flex:1}
-h2{font-size:22px;margin:4px 0 10px;color:var(--gold)}
-h3{font-size:18px;margin:18px 0 6px;color:var(--amber)}
-.note{color:var(--dim);font-size:16px}
-.warn{color:var(--alert)}
-.card{background:var(--panel);border-left:4px solid var(--line);padding:12px 14px;margin:0 0 12px;border-radius:0 6px 6px 0}
-.card.catch{border-left-color:var(--amber)}
-.card.hurry{border-left-color:var(--alert)}
-.catch .line{font-size:20px;font-weight:700;color:var(--gold)}
-.time{font-size:38px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--amber);line-height:1.1}
-.leave{font-size:19px;font-variant-numeric:tabular-nums}
-.leave b{color:var(--gold)}
-.hurry .leave b{color:var(--alert)}
-.walk{font-size:18px}
+#v-map{padding:0;touch-action:none}
+#map{position:absolute;inset:0;background:var(--card)}
+
+/* map keys: Commute's round, outlined controls */
+.mapbtns{position:absolute;right:10px;top:10px;z-index:900;display:flex;flex-direction:column;gap:7px}
+.mapbtns .btn{background:rgba(13,17,23,.86);border:1px solid var(--border);color:var(--text);
+  border-radius:16px;padding:6px 13px;font-size:13px;font-weight:700}
+.mapbtns .btn.on{border-color:var(--gold);color:var(--gold)}
+
+/* buttons are pills: gold outline for the action, grey outline for the rest */
+.btn{background:rgba(212,160,23,.12);color:var(--gold);border:1px solid var(--gold);border-radius:1rem;
+  padding:.45rem 1rem;font-weight:700;font-size:.88rem;cursor:pointer}
+.btn.ghost{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.btn:disabled{opacity:.45}
+.row{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;margin:0 0 .7rem}
+input[type=text],input[type=password],input[type=number],select{background:var(--card);border:1px solid var(--border);
+  border-radius:.65rem;padding:.5rem .7rem;min-width:0;flex:1;font-size:.9rem}
+input:focus,select:focus{outline:none;border-color:var(--gold)}
+h2{font-size:.72rem;margin:1.2rem 0 .5rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:700}
+h2:first-child{margin-top:.2rem}
+h3{font-size:.72rem;margin:.9rem 0 .35rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+.note{color:var(--muted);font-size:.8rem;margin:.2rem 0 .6rem;line-height:1.45}
+.warn{color:var(--late)}
+
+/* cards: Commute's zet-card, thin border, no heavy stripe */
+.card{background:var(--card);border:1px solid var(--border);border-radius:.75rem;padding:.65rem .8rem;margin:0 0 .6rem;font-size:.9rem}
+.card.catch{border-color:rgba(212,160,23,.45)}
+.card.hurry{border-color:rgba(248,81,73,.55)}
+.catch .line,.line{font-size:.95rem;font-weight:700;color:var(--text)}
+.time{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums;color:var(--live);line-height:1.1;margin:.15rem 0}
+.leave{font-size:.9rem;font-variant-numeric:tabular-nums}
+.leave b{color:var(--green)}
+.hurry .leave b{color:var(--late)}
+.walk{font-size:.88rem;color:var(--muted)}
 .walk b{color:var(--text)}
-.tag{display:inline-block;font-size:14px;padding:1px 8px;border-radius:10px;background:var(--raise);color:var(--dim);margin-right:6px}
-.tag.ok{color:var(--ok)}.tag.cool,.tag.dead{color:var(--alert)}.tag.new{color:var(--gold)}
-.dir{margin:6px 0 2px;font-weight:600}
-.stops{columns:2;column-gap:18px;font-size:16px;color:var(--dim);margin:6px 0 0;padding-left:22px}
-.tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line)}
-.tl li{margin:0 0 12px;position:relative}
-.tl li:before{content:"";position:absolute;left:-21px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--amber)}
-.tl .when{color:var(--gold);font-variant-numeric:tabular-nums;font-size:16px}
-.hl{padding:9px 0;border-bottom:1px solid var(--line)}
-.hl .meta{color:var(--dim);font-size:15px}
-.hl a{color:var(--text);text-decoration:none}
-.ev{padding:8px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:54px 1fr;gap:8px}
-.ev .hm{color:var(--gold);font-variant-numeric:tabular-nums}
-.ev.news .k,.ev.ai .k,.ev.fleet .k,.ev.lines .k,.ev.system .k,.ev.key .k{font-size:14px;color:var(--dim)}
-.ev.ai .t{color:var(--gold)}.ev.lines .t{color:var(--amber)}.ev.system .t,.ev.key .t{color:var(--dim)}
-.chips button{background:var(--raise);border:1px solid var(--line);border-radius:18px;padding:7px 14px;font-size:16px}
-.chips button.on{border-color:var(--amber);color:var(--amber)}
-.day{color:var(--amber);margin:14px 0 2px;font-weight:700}
-.lbl{background:transparent;border:0;box-shadow:none;color:#1a1200;font-weight:800;font-size:12px}
+
+/* the route pill, Commute's .route: tram gold, bus sea blue */
+.route{display:inline-block;border:2px solid var(--border);border-radius:.85rem;padding:.05rem .6rem;min-width:2.6rem;
+  text-align:center;font-weight:800;font-size:.85rem;font-variant-numeric:tabular-nums;margin-right:.45rem;vertical-align:1px}
+.route.tram{border-color:var(--gold);color:var(--gold);background:rgba(212,160,23,.10)}
+.route.bus{border-color:var(--sea);color:var(--sea);background:rgba(31,155,209,.12)}
+.lhead{display:flex;align-items:center;gap:.2rem;flex-wrap:wrap}
+.lhead .to{color:var(--muted);font-weight:500;font-size:.85rem}
+
+.tag{display:inline-block;font-size:.66rem;font-weight:700;padding:.1rem .5rem;border-radius:.6rem;border:1px solid var(--border);color:var(--muted);margin-right:.35rem;vertical-align:1px}
+.tag.ok,.tag.works,.tag.valid{color:var(--green);border-color:rgba(63,185,80,.6)}
+.tag.cool,.tag.throttled,.tag.new{color:var(--live);border-color:rgba(227,179,65,.55)}
+.tag.dead,.tag.rejected,.tag.nocredit{color:var(--late);border-color:rgba(248,81,73,.5)}
+.dir{margin:.5rem 0 .1rem;font-weight:700;font-size:.88rem}
+.stops{columns:2;column-gap:1rem;font-size:.8rem;color:var(--muted);margin:.35rem 0 0;padding-left:1.2rem}
+details summary{font-size:.8rem;color:var(--muted);cursor:pointer;margin:.15rem 0}
+.run{font-size:.86rem;padding:.3rem 0;border-top:1px solid rgba(255,255,255,.05)}
+.run .eta{color:var(--live);font-weight:700;font-variant-numeric:tabular-nums}
+
+.tl{list-style:none;margin:0;padding:0 0 0 .9rem;border-left:2px solid var(--border)}
+.tl li{margin:0 0 .6rem;position:relative;font-size:.88rem}
+.tl li:before{content:"";position:absolute;left:-1.28rem;top:.4rem;width:.55rem;height:.55rem;border-radius:50%;background:var(--gold)}
+.tl .when{color:var(--gold);font-variant-numeric:tabular-nums;font-size:.8rem;font-weight:700}
+.hl{padding:.5rem 0;border-bottom:1px solid var(--border)}
+.hl .meta{color:var(--faint);font-size:.74rem}
+.hl a{color:var(--text);text-decoration:none;font-size:.9rem}
+.ev{padding:.4rem 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:3rem 1fr;gap:.5rem;font-size:.86rem}
+.ev .hm{color:var(--green);font-variant-numeric:tabular-nums;font-weight:700}
+.ev .k{font-size:.7rem;color:var(--faint)}
+.ev.ai .t{color:var(--live)}.ev.lines .t{color:var(--gold)}.ev.system .t,.ev.key .t{color:var(--muted)}
+.chips{gap:.4rem}
+.chips button{background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:1.2rem;padding:.35rem .85rem;font-size:.8rem;font-weight:600}
+.chips button.on{border-color:var(--gold);color:var(--gold);background:rgba(212,160,23,.10)}
+.day{color:var(--muted);margin:.8rem 0 .1rem;font-weight:700;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+
+/* the map's own pieces */
+.lbl{background:transparent;border:0;box-shadow:none;color:#0d1117;font-weight:800;font-size:.7rem}
 .leaflet-tooltip.lbl:before{display:none}
-.dark .leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.9) contrast(.9) saturate(.6)}
-.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--text);border:1px solid var(--amber)}
-.leaflet-popup-content{font-size:16px;margin:12px 14px}
-.leaflet-container a.leaflet-popup-close-button{color:var(--text)}
-label.set{display:block;margin:12px 0 4px;color:var(--dim)}
-.tag.works,.tag.valid{color:var(--ok)}.tag.throttled{color:var(--gold)}.tag.nocredit{color:var(--alert)}.tag.rejected{color:var(--alert)}
-.radio{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}.radio label{background:var(--raise);border:1px solid var(--line);border-radius:18px;padding:8px 14px;font-size:16px}
-.radio input{accent-color:var(--amber);margin-right:6px}.radio label.off{opacity:.45}
-.apis{font-size:15px;color:var(--dim);margin-top:6px}.apis b{color:var(--text);font-weight:600}
-.ktitle{font-size:18px;font-weight:700;color:var(--gold)}.ktitle.none{color:var(--dim);font-weight:400;font-style:italic}.kfp{color:var(--dim);font-size:14px;margin-left:6px}
-.card .row{margin:8px 0 0}.card .btn{padding:8px 12px;font-size:15px}.card label.use{display:inline-flex;align-items:center;gap:6px;margin-right:8px}
-#ver{display:block;margin:26px 0 6px;color:var(--dim);font-size:14px;text-decoration:none}
-:focus-visible{outline:3px solid var(--you);outline-offset:2px}
+.dark .leaflet-tile-pane .base{filter:invert(1) hue-rotate(185deg) brightness(.85) contrast(.9) saturate(.5)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:.75rem}
+.leaflet-popup-content{font-size:.86rem;margin:.6rem .8rem;line-height:1.45}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.leaflet-control-attribution{font-size:.6rem!important;background:rgba(13,17,23,.7)!important;color:var(--faint)!important}
+.leaflet-control-attribution a{color:var(--muted)!important}
+
+label.set{display:block;margin:.6rem 0 .25rem;color:var(--muted);font-size:.8rem}
+.radio{display:flex;gap:.4rem;flex-wrap:wrap;margin:.3rem 0 .6rem}
+.radio label{background:var(--card);border:1px solid var(--border);border-radius:1.2rem;padding:.35rem .8rem;font-size:.82rem;color:var(--muted)}
+.radio label:has(input:checked){border-color:var(--gold);color:var(--gold)}
+.radio input{accent-color:var(--gold);margin:0 .35rem 0 0;vertical-align:-1px}.radio label.off{opacity:.45}
+.apis{font-size:.78rem;color:var(--muted);margin-top:.3rem}.apis b{color:var(--text);font-weight:600}
+.ktitle{font-size:.95rem;font-weight:700;color:var(--text)}.ktitle.none{color:var(--faint);font-weight:500;font-style:italic}
+.kfp{color:var(--faint);font-size:.72rem;margin-left:.4rem;font-variant-numeric:tabular-nums}
+.card .row{margin:.5rem 0 0}.card .btn{padding:.3rem .75rem;font-size:.78rem}
+.card label.use{display:inline-flex;align-items:center;gap:.3rem;margin-right:.5rem;font-size:.8rem;color:var(--muted)}
+.card label.use input{accent-color:var(--gold)}
+#ver{display:block;margin:1.6rem 0 .4rem;color:var(--faint);font-size:.7rem;text-decoration:none}
+#zoomhint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + var(--top) + 10px);transform:translateX(-50%);
+  z-index:1100;background:rgba(22,27,34,.94);border:1px solid var(--border);border-radius:16px;padding:5px 14px;
+  font-size:13px;color:var(--muted);opacity:0;transition:opacity .25s;pointer-events:none}
+#zoomhint.on{opacity:1}
+:focus-visible{outline:2px solid var(--you);outline-offset:2px}
 </style>
 </head>
 <body>
-<header id="top"><h1>ZET strike</h1><div id="status">starting</div></header>
+<header id="top"><h1>ZET strike</h1><div id="clock">--:--</div><div id="status">starting</div></header>
+<div id="zoomhint">text 100%</div>
 
 <section class="view on" id="v-map">
   <div id="map"></div>
   <div class="mapbtns">
     <button class="btn ghost" id="b-me" type="button">Me</button>
     <button class="btn ghost" id="b-parked" type="button">Parked: off</button>
+    <button class="btn ghost" id="b-sat" type="button">Satellite</button>
   </div>
 </section>
 
@@ -161,7 +227,7 @@ label.set{display:block;margin:12px 0 4px;color:var(--dim)}
   <label class="set" for="s-buf">Arrive at the stop this early (minutes)</label><input type="number" id="s-buf">
   <label class="set" for="s-lay">Turnaround at the last stop (minutes)</label><input type="number" id="s-lay">
   <div class="row" style="margin-top:16px"><button class="btn" id="b-save" type="button">Save settings</button><span class="note" id="savemsg"></span></div>
-  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V10</a>
+  <a id="ver" href="https://github.com/markoboskoauroville/zet_strike" target="_blank" rel="noopener">V11</a>
 </section>
 
 <nav id="tabs">
@@ -206,29 +272,48 @@ function show(v) {
 
 // ---------------------------------------------------------------- map
 const map = L.map("map", {zoomControl: false}).setView([45.8153, 15.978], 13);
-const OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-let tiles = null;
-function setTiles(url, google) {
-  url = url || OSM;
+// V11: every tile comes through this app (tiles.py). OpenStreetMap refused the page's own requests
+// ("403 Access blocked", 30.9.2026): the server asks with a User-Agent that names the app, and keeps
+// each tile on the phone, so a street seen once costs nothing again and is there with no signal.
+let TILE = {osm: "", esri: "", google: "", googlesat: ""};
+let tiles = null, sat = null, satOn = false, lastSettings = null;
+try { satOn = localStorage.getItem("zet.sat") === "1"; } catch (e) {}
+function setTiles(url, kind) {
+  if (!url) return;
   if (tiles && tiles._url === url) return;
   if (tiles) map.removeLayer(tiles);
-  tiles = L.tileLayer(url, {attribution: url === OSM ? "&copy; OpenStreetMap contributors" : google ? "Map data &copy; Google" : "your map server", maxZoom: google ? 22 : 19}).addTo(map);
-  document.getElementById("map").classList.toggle("dark", url === OSM || !!google);
+  const attr = {osm: "&copy; OpenStreetMap contributors", google: "Map data &copy; Google"}[kind] || "your map server";
+  tiles = L.tileLayer(url, {attribution: attr, maxZoom: kind === "google" ? 22 : 19, className: "base"}).addTo(map);
+  document.getElementById("map").classList.toggle("dark", kind === "osm" || kind === "google");
+}
+// Satellite lies OVER the map, a switch on the map (Marko, 30.9.2026: start with the map, keep the
+// satellite as an overlay). Google's when a Google key draws tiles, Esri's free imagery otherwise.
+function setSat(s) {
+  const g = s && s.google && s.google.has_key && s.google.tiles === "works";
+  const url = g ? TILE.googlesat : TILE.esri;
+  if (sat && (!satOn || sat._url !== url)) { map.removeLayer(sat); sat = null; }
+  if (satOn && !sat && url) sat = L.tileLayer(url, {attribution: g ? "Imagery &copy; Google" : "Imagery &copy; Esri", maxZoom: g ? 22 : 19, className: "sat"}).addTo(map);
+  $("b-sat").classList.toggle("on", satOn);
 }
 function tilesFrom(s) {
-  if (s.map === "google" && s.google && s.google.has_key) return setTiles(s.google_tiles, true);
-  if (s.map === "own" && s.tiles) return setTiles(s.tiles);
-  setTiles(OSM);
+  lastSettings = s;
+  if (s.tile_urls) TILE = s.tile_urls;
+  if (s.map === "google" && s.google && s.google.has_key) setTiles(TILE.google, "google");
+  else if (s.map === "own" && s.tiles) setTiles(s.tiles, "own");
+  else setTiles(TILE.osm, "osm");
+  setSat(s);
 }
-api("/api/settings").then(tilesFrom).catch(() => setTiles(OSM));
+$("b-sat").onclick = () => { satOn = !satOn; try { localStorage.setItem("zet.sat", satOn ? "1" : "0"); } catch (e) {} setSat(lastSettings); };
+api("/api/settings").then(tilesFrom).catch(() => {});
 const markers = {};
 let showParked = false, lastLive = null, me = null, meMarker = null, meCircle = null, pick = null, pickLayer = null;
 $("b-parked").onclick = () => { showParked = !showParked; $("b-parked").textContent = "Parked: " + (showParked ? "on" : "off"); drawVehicles(); };
 $("b-me").onclick = () => { if (me) map.setView([me.lat, me.lon], 16); else startGps(true); };
 map.on("contextmenu", e => { setMe(e.latlng.lat, e.latlng.lng, 0, "a point you chose on the map"); show("near"); });
 
+const pill = v => "<span class='route " + (v.tram ? "tram" : "bus") + "'>" + esc(v.line) + "</span>";
 function popup(v) {
-  let h = "<b>" + kind(v) + " " + esc(v.line) + "</b> to " + esc(v.head) + "<br>";
+  let h = "<div class='lhead'>" + pill(v) + "<span class='to'>to " + esc(v.head) + "</span></div>";
   if (v.parked) return h + "Parked near " + esc(v.near) + ", not in service";
   h += (v.status === "MOVING" ? "Moving " + v.kmh + " km/h" : v.status === "STANDING" ? "Standing" : "Position only") + ", near " + esc(v.near);
   if (v.age > 60) h += "<br><span class='warn'>Signal " + Math.round(v.age / 60) + " min old</span>";
@@ -322,7 +407,7 @@ async function near() {
                  "return": "After it turns at the last stop.", position: "Estimated from its last position."};
   $("options").innerHTML = d.options.slice(0, 8).map((o, i) =>
     "<div class='card catch" + (o.hurry ? " hurry" : "") + "' data-i='" + i + "'>" +
-    "<div class='line'>" + kind(o) + " " + esc(o.line) + " to " + esc(o.head) + "</div>" +
+    "<div class='lhead'>" + pill(o) + "<span class='to'>to " + esc(o.head) + "</span></div>" +
     "<div class='time'>" + esc(o.eta_s) + "</div>" +
     "<div class='walk'>Walk <b>" + Math.max(1, Math.round(o.walk)) + " min</b> (" + o.dist + " m) to <b>" + esc(o.stop) + "</b></div>" +
     "<div class='leave'>" + (o.hurry ? "Leave <b>now</b>" : "Leave by <b>" + esc(o.leave_s) + "</b>") + "</div>" +
@@ -343,14 +428,14 @@ setInterval(() => { if (view === "near" && me && !document.hidden) near(); }, 20
 
 // ---------------------------------------------------------------- lines
 function lineCard(d) {
-  let h = "<div class='card'><div class='catch'><span class='line'>" + kind(d) + " " + esc(d.line) + "</span></div><div class='note'>" + esc(d.long) + "</div>";
+  let h = "<div class='card'><div class='lhead'>" + pill(d) + "<span class='line'>" + esc(d.long) + "</span></div>";
   d.dirs.forEach(x => {
     h += "<div class='dir'>" + (x.circular ? "Loop from " + esc(x.from) : esc(x.from) + " to " + esc(x.to)) + "</div>" +
       "<div class='note'>" + x.stops + " stops, " + x.mins + " min. " + (x.first ? "Normally " + esc(x.first) + " to " + esc(x.last) + "." : "No trips today in the timetable.") + "</div>" +
       "<details><summary class='note'>All stops</summary><ol class='stops'>" + x.names.map(n => "<li>" + esc(n) + "</li>").join("") + "</ol></details>";
   });
   const run = d.vehicles.filter(v => !v.parked), park = d.vehicles.filter(v => v.parked);
-  if (run.length) h += "<h3>Running now</h3>" + run.map(v => "<div>Vehicle " + esc(v.key) + " near " + esc(v.near) + ", to " + esc(v.head) + (v.to_end ? " (there about " + esc(v.to_end) + ")" : "") + "</div>").join("");
+  if (run.length) h += "<h3>Running now</h3>" + run.map(v => "<div class='run'>" + (v.to_end ? "<span class='eta'>" + esc(v.to_end) + "</span> " : "") + "to " + esc(v.head) + " <span class='note'>near " + esc(v.near) + " &middot; " + esc(v.key) + "</span></div>").join("");
   if (park.length) h += "<div class='note'>Parked: " + park.map(v => esc(v.key) + " near " + esc(v.near)).join("; ") + "</div>";
   if (!d.vehicles.length) h += "<div class='warn'>Not in the live feed right now.</div>";
   return h + "</div>";
@@ -459,12 +544,12 @@ async function settings() {
 }
 const STATE_WORD = {works: "works", valid: "valid", "no credit": "no credit", rejected: "rejected", throttled: "throttled", unclear: "unclear",
                     "not enabled": "not enabled", restricted: "restricted", "new": "not tested"};
-const SRC = {feed: "live feed", timetable: "timetable", news: "news feeds"};
+const SRC = {feed: "live feed", timetable: "timetable", news: "news feeds", tiles: "map tiles"};
 async function traffic() {
   const t = await api("/api/traffic");
   if (t.error) return;
   $("t-total").textContent = t.total_s;
-  $("t-rows").innerHTML = ["feed", "timetable", "news"].map(k => { const v = t.sources[k] || {bytes_s: "0 B", net: 0, same: 0, cache: 0};
+  $("t-rows").innerHTML = ["feed", "timetable", "news", "tiles"].map(k => { const v = t.sources[k] || {bytes_s: "0 B", net: 0, same: 0, cache: 0};
     return "<b>" + SRC[k] + "</b> " + esc(v.bytes_s) + ", " + v.net + " down, " + v.same + " not changed, " + v.cache + " copies used"; }).join("<br>");
   $("t-now").textContent = "Now asking for the live feed every " + (t.interval >= 60 ? Math.round(t.interval / 60) + " min" : t.interval + " s") + (t.watching ? ", because a page is open." : ", nobody looking.");
 }
@@ -560,6 +645,44 @@ $("b-save").onclick = async () => {
   if (!r.error) { settings(); tilesFrom(r); }
   setTimeout(() => $("savemsg").textContent = "", 3000);
 };
+
+// ---------------------------------------------------------------- the clock, as in Commute's top bar
+function tick() { $("clock").textContent = new Date().toLocaleTimeString("hr-HR", {hour: "2-digit", minute: "2-digit"}); }
+tick(); setInterval(tick, 5000);
+
+// ---------------------------------------------------------------- pinch: the size of the text
+// Marko, 30.9.2026: pinch the screen to enlarge or reduce the font, so more fits. Two fingers on any
+// page but the map change ONE number, the root font size; every size on the page is in rem, so all
+// of it scales together and the layout keeps its shape. On the map, two fingers zoom the map.
+// Kept on this phone (a per-viewer convenience), 70% to 180%.
+const SCALE_MIN = 0.7, SCALE_MAX = 1.8;
+let scale = 1;
+try { scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, parseFloat(localStorage.getItem("zet.scale")) || 1)); } catch (e) {}
+function applyScale(save) {
+  document.documentElement.style.fontSize = (16 * scale).toFixed(2) + "px";
+  $("zoomhint").textContent = "text " + Math.round(scale * 100) + "%";
+  if (save) try { localStorage.setItem("zet.scale", String(scale)); } catch (e) {}
+  if (view === "map") setTimeout(() => map.invalidateSize(), 50);
+}
+applyScale(false);
+let pinch = null, hintTimer = null;
+const gap = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+document.addEventListener("touchstart", e => {
+  if (e.touches.length === 2 && !e.target.closest("#map")) pinch = {d: gap(e.touches), s: scale};
+}, {passive: true});
+document.addEventListener("touchmove", e => {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();                              // the page itself never zooms: only the text does
+  scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, pinch.s * gap(e.touches) / pinch.d));
+  applyScale(false);
+  $("zoomhint").classList.add("on");
+}, {passive: false});
+document.addEventListener("touchend", e => {
+  if (!pinch || e.touches.length >= 2) return;
+  pinch = null;
+  applyScale(true);
+  clearTimeout(hintTimer); hintTimer = setTimeout(() => $("zoomhint").classList.remove("on"), 900);
+}, {passive: true});
 
 startGps(false);
 </script>

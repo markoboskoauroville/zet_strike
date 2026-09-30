@@ -271,8 +271,11 @@ def test(fp=None):
 
 
 # ---------------------------------------------------------------- the tiles
-def _new_session(key):
-    body = json.dumps({"mapType": "roadmap", "language": "hr-HR", "region": "HR"}).encode()
+_sat_session = {"token": None, "expiry": 0, "fp": None}     # V11: satellite has a session of its own
+
+
+def _new_session(key, map_type="roadmap"):
+    body = json.dumps({"mapType": map_type, "language": "hr-HR", "region": "HR"}).encode()
     code, data, _h = probes.http("POST", "%s/v1/createSession?key=%s" % (TILE_BASE, urllib.parse.quote(key)),
                                  {"Content-Type": "application/json"}, body)
     j = probes.jbody(data) or {}
@@ -286,23 +289,25 @@ def _new_session(key):
     return j["session"], expiry or time.time() + 86400
 
 
-def tile(z, x, y):
-    """(status, bytes, content type). One retry with a fresh session when Google says the old one ended."""
+def tile(z, x, y, map_type="roadmap"):
+    """(status, bytes, content type). One retry with a fresh session when Google says the old one ended.
+    map_type: roadmap (the map) or satellite (the overlay, V11)."""
     key, _source = current()
     if not key:
         return 404, b"", "text/plain"
     fp = fingerprint(key)
+    sess = _sat_session if map_type == "satellite" else _session
     for attempt in (0, 1):
         with _lock:
-            fresh = _session["token"] and _session["fp"] == fp and _session["expiry"] - time.time() > 600
-            token = _session["token"] if fresh else None
+            fresh = sess["token"] and sess["fp"] == fp and sess["expiry"] - time.time() > 600
+            token = sess["token"] if fresh else None
         if not token:
             try:
-                token, expiry = _new_session(key)
+                token, expiry = _new_session(key, map_type)
             except RuntimeError as e:
                 return 502, str(e).encode(), "text/plain"
             with _lock:
-                _session.update(token=token, expiry=expiry, fp=fp)
+                sess.update(token=token, expiry=expiry, fp=fp)
         url = "%s/v1/2dtiles/%d/%d/%d?session=%s&key=%s" % (TILE_BASE, z, x, y, urllib.parse.quote(token), urllib.parse.quote(key))
         code, data, headers = probes.http("GET", url, {"Accept": "image/*"}, timeout=15)
         if code == 200:
@@ -310,7 +315,7 @@ def tile(z, x, y):
             return 200, data, ctype
         if code in (400, 401, 403) and attempt == 0:
             with _lock:
-                _session.update(token=None, expiry=0, fp=None)
+                sess.update(token=None, expiry=0, fp=None)
             continue
         return (code if code > 0 else 504), b"", "text/plain"
     return 502, b"", "text/plain"

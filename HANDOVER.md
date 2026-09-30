@@ -1,6 +1,6 @@
 # ZET Strike: handover
 
-    version      V10 (30.9.2026)
+    version      V11 (30.9.2026)
     repository   markoboskoauroville/zet_strike (public)
     command      zet (the server; zet map is the same), zet now (the board in the terminal)
     port         8100, then the next fifteen, then any (MANTRA_MANIFEST ports.md)
@@ -17,6 +17,35 @@
 
 Two screenshots came with it: `zet` on day 3 with 0 in service, and MA READER's server console
 (the name, a dashed rule, "on this phone" and "library", then [O] [A] [U] [Q]).
+
+## V11 (30.9.2026): the Day Commute look, pinch for text, the map fixed
+
+Marko, 30.9.2026, with two screenshots (the map all "403 Access blocked", the Lines page): *"User
+interface is too bulky. All text looks unpolished. Please look at my polishing app and copy from
+them ... Day Commute app ... allow user to pinch the screen to either enlarge font or reduce the size
+of the font so more of things can fit on the screen. And map is not showing ... We should start with
+the not satellite map and then keep the overlay for satellite."*
+
+- **The map.** Not Google, not satellite: OpenStreetMap refused every tile ("403 Access blocked, App
+  is not following the tile usage policy") because V7's `Referrer-Policy: same-origin` sent it no
+  Referer. Tiles now come through the server (`app/tiles.py`, `/tile/<source>/z/x/y`) with a
+  User-Agent naming the app, and each tile is kept on the phone for 30 days: the policy asks for
+  both, and a street seen once costs no data again. Counted as "map tiles" in the Data card.
+- **Satellite is a switch on the map**, over the map, remembered: Google's satellite when a Google
+  key draws tiles (a Map Tiles session of its own), Esri World Imagery otherwise. The map underneath
+  stays the dark OpenStreetMap (or Google roadmap, or your own server, from Settings).
+- **The look is Day Commute's** (MAHA_COMMUTE `bus.html` v13): its palette (`#0d1117`, cards
+  `#161b22`, borders `#30363d`, gold `#d4a017`, sea blue, green times, yellow live, red late), the
+  system font at small rem sizes, route numbers as outlined pills (tram gold, bus sea blue), pill
+  buttons, thin-bordered cards, small-caps section heads, and the clock in the top bar.
+- **Pinch sizes the text.** Two fingers on any page but the map change the root font size, 70% to
+  180%; every size in the content is in rem, so it all scales together. The top bar, the tabs and
+  the map keys are in px and stay put. The size is kept on the phone. On the map, two fingers zoom
+  the map. The page itself never zooms (`user-scalable=no`, and the gesture is taken).
+
+**Not tested:** the pinch on a real phone's touch screen (Chromium's touch emulation only), and
+whether Chrome's accessibility setting "Force enable zoom" overrides it; real OSM and Esri tiles
+(unreachable from the cloud machine; a stand-in server checked the User-Agent and the cache).
 
 ## V10 (30.9.2026): keys from files, with titles
 
