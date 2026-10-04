@@ -5,23 +5,27 @@ ZET and Zagrebački holding strike (from 28.09.2026). Mantra Productions.
 
 ## Install on the phone (Termux)
 
-    curl -fsSL https://raw.githubusercontent.com/markoboskoauroville/zet_strike/main/install.sh | bash
+```sh
+curl -fsSL https://raw.githubusercontent.com/markoboskoauroville/zet_strike/main/install.sh | bash
+```
 
 For GPS in `zet near`, also install the Termux:API app from F-Droid.
 
 ## Commands
 
-    zet                  what runs now, with next stops
-    zet near             where and when to catch the next tram or bus
-    zet lines            lines in service: names, terminals
-    zet line 228         one line with all its stops
-    zet news             strike headlines, Gemini summary and timeline
-    zet log              event log of everything the feed and news did
-    zet keys             Gemini keys, used in order with fallback
-    zet watch            live view
-    zet update           newest version from this repo, then the timetable
-    zet update check     only look, change nothing
-    zet map              the same as a map page in Chrome
+```
+zet                  what runs now, with next stops
+zet near             where and when to catch the next tram or bus
+zet lines            lines in service: names, terminals
+zet line 228         one line with all its stops
+zet news             strike headlines, Gemini summary and timeline
+zet log              event log of everything the feed and news did
+zet keys             Gemini keys, used in order with fallback
+zet watch            live view
+zet update           newest version from this repo, then the timetable
+zet update check     only look, change nothing
+zet map              the same as a map page in Chrome
+```
 
 ## How updating works
 
