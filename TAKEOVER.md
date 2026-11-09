@@ -1,3 +1,7 @@
+
+
+## From the former README (9.11.2026)
+
 # zet_strike
 
 ZET Strike: a Termux app that follows Zagreb public transport during the
